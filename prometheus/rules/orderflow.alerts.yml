@@ -1,0 +1,45 @@
+groups:
+  - name: orderflow_alerts
+    interval: 15s
+
+    rules:
+
+      - alert: OrderFlowDown
+        expr: up{job="orderflow"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: orderflow
+        annotations:
+          summary: "OrderFlow service is down"
+          description: "Prometheus cannot scrape the OrderFlow service."
+
+      - alert: OrderFlowHighErrorRate
+        expr: orderflow:http_error_ratio:rate5m > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: orderflow
+        annotations:
+          summary: "OrderFlow error rate is high"
+          description: "HTTP 5xx error rate has been above 5% for 2 minutes."
+
+      - alert: OrderFlowHighLatency
+        expr: orderflow:http_latency_p95:5m > 1
+        for: 2m
+        labels:
+          severity: warning
+          service: orderflow
+        annotations:
+          summary: "OrderFlow latency is high"
+          description: "HTTP P95 latency has been above 1 second for 2 minutes."
+
+      - alert: OrderFlowLowCacheHitRatio
+        expr: orderflow:cache_hit_ratio:5m < 0.50
+        for: 5m
+        labels:
+          severity: warning
+          service: orderflow
+        annotations:
+          summary: "OrderFlow cache hit ratio is low"
+          description: "Redis cache hit ratio has been below 50% for 5 minutes."

@@ -1,0 +1,82 @@
+groups:
+  - name: orderflow_recording_rules
+    interval: 15s
+
+    rules:
+
+      - record: orderflow:http_requests:rate5m
+        expr: |
+          sum(
+            rate(orderflow_http_requests_total[5m])
+          )
+
+      - record: orderflow:http_errors:rate5m
+        expr: |
+          sum(
+            rate(orderflow_http_requests_total{status=~"5.."}[5m])
+          )
+
+      - record: orderflow:http_error_ratio:rate5m
+        expr: |
+          (
+            sum(
+              rate(orderflow_http_requests_total{status=~"5.."}[5m])
+            )
+          )
+          /
+          (
+            sum(
+              rate(orderflow_http_requests_total[5m])
+            )
+          )
+
+      - record: orderflow:http_latency_p50:5m
+        expr: |
+          histogram_quantile(
+            0.50,
+            sum by (le) (
+              rate(orderflow_http_request_duration_seconds_bucket[5m])
+            )
+          )
+
+      - record: orderflow:http_latency_p95:5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(orderflow_http_request_duration_seconds_bucket[5m])
+            )
+          )
+
+      - record: orderflow:http_latency_p99:5m
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (
+              rate(orderflow_http_request_duration_seconds_bucket[5m])
+            )
+          )
+
+      - record: orderflow:cache_hit_ratio:5m
+        expr: |
+          (
+            sum(rate(orderflow_cache_hits_total[5m]))
+          )
+          /
+          (
+            sum(rate(orderflow_cache_hits_total[5m]))
+            +
+            sum(rate(orderflow_cache_misses_total[5m]))
+          )
+
+      - record: orderflow:orders_created:rate5m
+        expr: |
+          sum(
+            rate(orderflow_orders_created_total[5m])
+          )
+
+      - record: orderflow:payment_failures:rate5m
+        expr: |
+          sum(
+            rate(orderflow_payment_failure_total[5m])
+          )
