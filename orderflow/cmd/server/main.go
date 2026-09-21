@@ -112,12 +112,14 @@ func main() {
 		repository.NewProductRepository(
 			db,
 			applicationMetrics,
+			failureSimulator,
 		)
 
 	orderRepository :=
 		repository.NewOrderRepository(
 			db,
 			applicationMetrics,
+			failureSimulator,
 		)
 
 	// -------------------------
@@ -125,8 +127,11 @@ func main() {
 	// -------------------------
 
 	productCache :=
-		cache.NewProductCache(redisClient,
-			applicationMetrics)
+		cache.NewProductCache(
+			redisClient,
+			applicationMetrics,
+			failureSimulator,
+		)
 
 	// -------------------------
 	// Services
@@ -136,6 +141,7 @@ func main() {
 		service.NewProductService(
 			productRepository,
 			productCache,
+			failureSimulator,
 		)
 
 	orderService :=
@@ -149,12 +155,13 @@ func main() {
 	paymentService :=
 		service.NewPaymentService(
 			applicationMetrics,
+			failureSimulator,
 		)
 
 	// -------------------------
 	// Handlers
 	// -------------------------
-
+	deploymentHandler := handler.NewDeploymentHandler()
 	productHandler :=
 		handler.NewProductHandler(
 			productService,
@@ -245,14 +252,18 @@ func main() {
 		healthHandler.Health,
 	)
 	mux.HandleFunc(
-	"POST /api/admin/failure-scenario",
-	failureHandler.SetScenario,
-)
+		"POST /api/admin/failure-scenario",
+		failureHandler.SetScenario,
+	)
 
-mux.HandleFunc(
-	"GET /api/admin/failure-scenario",
-	failureHandler.GetScenario,
-)
+	mux.HandleFunc(
+		"GET /api/admin/failure-scenario",
+		failureHandler.GetScenario,
+	)
+	mux.HandleFunc(
+		"GET /api/deployments",
+		deploymentHandler.GetDeployments,
+	)
 	// -------------------------
 	// HTTP server
 	// -------------------------

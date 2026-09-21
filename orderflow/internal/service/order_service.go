@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"orderflow/internal/failure"
@@ -15,7 +16,7 @@ type OrderService struct {
 	orderRepository   *repository.OrderRepository
 	productRepository *repository.ProductRepository
 	metrics           *metrics.Metrics
-	simulator 		*failure.Simulator
+	simulator         *failure.Simulator
 }
 
 func NewOrderService(
@@ -23,14 +24,14 @@ func NewOrderService(
 	productRepository *repository.ProductRepository,
 	metrics *metrics.Metrics,
 	simulator *failure.Simulator,
-	
+
 ) *OrderService {
 
 	return &OrderService{
 		orderRepository:   orderRepository,
 		productRepository: productRepository,
 		metrics:           metrics,
-		simulator:       simulator,
+		simulator:         simulator,
 	}
 }
 
@@ -90,10 +91,18 @@ func (s *OrderService) CreateOrder(
 		)
 
 		if err != nil {
-			return nil, fmt.Errorf(
-				"product %d not found",
-				requestItem.ProductID,
-			)
+			if strings.Contains(err.Error(), "not found") {
+				return nil, fmt.Errorf(
+					"product %d not found",
+					requestItem.ProductID,
+				)
+			}
+
+			s.metrics.OrdersFailedTotal.
+				WithLabelValues("database").
+				Inc()
+
+			return nil, err
 		}
 
 		if product.StockQuantity < requestItem.Quantity {

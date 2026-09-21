@@ -8,12 +8,12 @@ import (
 type Scenario string
 
 const (
-	Normal          Scenario = "normal"
-	Slow            Scenario = "slow"
-	PaymentFailure  Scenario = "payment_failure"
-	DBFailure       Scenario = "db_failure"
-	RedisFailure    Scenario = "redis_failure"
-	ErrorSpike      Scenario = "error_spike"
+	Normal         Scenario = "normal"
+	Slow           Scenario = "slow"
+	PaymentFailure Scenario = "payment_failure"
+	DBFailure      Scenario = "db_failure"
+	RedisFailure   Scenario = "redis_failure"
+	ErrorSpike     Scenario = "error_spike"
 )
 
 type Simulator struct {

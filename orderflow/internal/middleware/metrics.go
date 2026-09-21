@@ -43,7 +43,7 @@ func Metrics(
 				next.ServeHTTP(w, r)
 				return
 			}
-			
+
 			start := time.Now()
 
 			route := r.Pattern

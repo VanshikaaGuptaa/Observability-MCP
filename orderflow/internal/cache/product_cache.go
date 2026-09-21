@@ -4,29 +4,34 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 
+	"orderflow/internal/failure"
 	"orderflow/internal/metrics"
 	"orderflow/internal/model"
 )
 
 type ProductCache struct {
-	client  *redis.Client
-	ttl     time.Duration
-	metrics *metrics.Metrics
+	client    *redis.Client
+	ttl       time.Duration
+	metrics   *metrics.Metrics
+	simulator *failure.Simulator
 }
 
 func NewProductCache(
 	client *redis.Client,
 	metrics *metrics.Metrics,
+	simulator *failure.Simulator,
 ) *ProductCache {
 
 	return &ProductCache{
-		client:  client,
-		ttl:     5 * time.Minute,
-		metrics: metrics,
+		client:    client,
+		ttl:       5 * time.Minute,
+		metrics:   metrics,
+		simulator: simulator,
 	}
 }
 
@@ -34,6 +39,22 @@ func (c *ProductCache) Get(
 	ctx context.Context,
 	productID int64,
 ) (*model.Product, error) {
+
+	if c.simulator.IsEnabled(failure.RedisFailure) {
+		c.metrics.CacheErrorsTotal.
+			WithLabelValues("redis").
+			Inc()
+
+		slog.Error(
+			"redis operation failed: connection refused",
+			"operation", "cache_get",
+			"dependency", "redis",
+			"error", "redis: connection refused",
+			"product_id", productID,
+		)
+
+		return nil, fmt.Errorf("redis: connection refused")
+	}
 
 	key := fmt.Sprintf("product:%d", productID)
 
@@ -65,6 +86,10 @@ func (c *ProductCache) Get(
 		return nil, fmt.Errorf("failed to decode cached product: %w", err)
 	}
 
+	c.metrics.CacheHitsTotal.
+		WithLabelValues("redis").
+		Inc()
+
 	return &product, nil
 }
 
@@ -72,6 +97,22 @@ func (c *ProductCache) Set(
 	ctx context.Context,
 	product *model.Product,
 ) error {
+
+	if c.simulator.IsEnabled(failure.RedisFailure) {
+		c.metrics.CacheErrorsTotal.
+			WithLabelValues("redis").
+			Inc()
+
+		slog.Warn(
+			"redis operation failed: connection refused",
+			"operation", "cache_set",
+			"dependency", "redis",
+			"error", "redis: connection refused",
+			"product_id", product.ID,
+		)
+
+		return fmt.Errorf("redis: connection refused")
+	}
 
 	key := fmt.Sprintf("product:%d", product.ID)
 
@@ -86,6 +127,9 @@ func (c *ProductCache) Set(
 		value,
 		c.ttl,
 	).Err(); err != nil {
+		c.metrics.CacheErrorsTotal.
+			WithLabelValues("redis").
+			Inc()
 		return fmt.Errorf("redis set failed: %w", err)
 	}
 

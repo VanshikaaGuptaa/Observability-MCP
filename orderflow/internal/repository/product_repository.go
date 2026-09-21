@@ -4,32 +4,48 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"orderflow/internal/failure"
 	"orderflow/internal/metrics"
 	"orderflow/internal/model"
 )
 
 type ProductRepository struct {
-	db      *pgxpool.Pool
-	metrics *metrics.Metrics
+	db        *pgxpool.Pool
+	metrics   *metrics.Metrics
+	simulator *failure.Simulator
 }
 
 func NewProductRepository(
 	db *pgxpool.Pool,
 	metrics *metrics.Metrics,
+	simulator *failure.Simulator,
 ) *ProductRepository {
 
 	return &ProductRepository{
-		db:      db,
-		metrics: metrics,
+		db:        db,
+		metrics:   metrics,
+		simulator: simulator,
 	}
 }
 
 func (r *ProductRepository) FindAll(ctx context.Context) ([]model.Product, error) {
+	if r.simulator.IsEnabled(failure.DBFailure) {
+		slog.Error(
+			"database operation failed: connection refused",
+			"operation", "find_all_products",
+			"dependency", "postgres",
+			"error", "database connection refused",
+		)
+
+		return nil, fmt.Errorf("database connection refused")
+	}
+
 	start := time.Now()
 
 	defer func() {
@@ -94,6 +110,18 @@ func (r *ProductRepository) FindByID(
 	ctx context.Context,
 	id int64,
 ) (*model.Product, error) {
+	if r.simulator.IsEnabled(failure.DBFailure) {
+		slog.Error(
+			"database operation failed: connection refused",
+			"operation", "find_product_by_id",
+			"dependency", "postgres",
+			"error", "database connection refused",
+			"product_id", id,
+		)
+
+		return nil, fmt.Errorf("database connection refused")
+	}
+
 	start := time.Now()
 
 	defer func() {

@@ -3,21 +3,27 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math/rand"
-	"orderflow/internal/metrics"
 	"time"
+
+	"orderflow/internal/failure"
+	"orderflow/internal/metrics"
 )
 
 type PaymentService struct {
-	metrics *metrics.Metrics
+	metrics   *metrics.Metrics
+	simulator *failure.Simulator
 }
 
 func NewPaymentService(
 	metrics *metrics.Metrics,
+	simulator *failure.Simulator,
 ) *PaymentService {
 
 	return &PaymentService{
-		metrics: metrics,
+		metrics:   metrics,
+		simulator: simulator,
 	}
 }
 
@@ -45,16 +51,43 @@ func (s *PaymentService) ProcessPayment(
 	}
 
 	// Temporary simulated payment processing.
-	// Later we will deliberately introduce latency
-	// and failure scenarios here.
-
 	time.Sleep(100 * time.Millisecond)
+
+	if s.simulator.IsEnabled(failure.PaymentFailure) {
+		s.metrics.PaymentFailureTotal.
+			WithLabelValues("provider_unavailable").
+			Inc()
+
+		slog.Error(
+			"payment processing failed: payment provider unavailable",
+			"operation", "process_payment",
+			"dependency", "payment_gateway",
+			"reason", "provider_unavailable",
+			"error", "payment provider unavailable",
+			"order_id", request.OrderID,
+			"amount", request.Amount,
+		)
+
+		return nil, fmt.Errorf(
+			"payment provider unavailable",
+		)
+	}
 
 	if rand.Float64() < 0.05 {
 
 		s.metrics.PaymentFailureTotal.
 			WithLabelValues("provider_unavailable").
 			Inc()
+
+		slog.Error(
+			"payment processing failed: payment provider unavailable",
+			"operation", "process_payment",
+			"dependency", "payment_gateway",
+			"reason", "provider_unavailable",
+			"error", "payment provider unavailable",
+			"order_id", request.OrderID,
+			"amount", request.Amount,
+		)
 
 		return nil, fmt.Errorf(
 			"payment provider unavailable",

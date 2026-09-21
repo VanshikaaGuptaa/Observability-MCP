@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"orderflow/internal/model"
 	"orderflow/internal/service"
@@ -43,10 +44,22 @@ func (h *OrderHandler) CreateOrder(
 	)
 
 	if err != nil {
+		if strings.Contains(err.Error(), "required") ||
+			strings.Contains(err.Error(), "greater than zero") ||
+			strings.Contains(err.Error(), "not found") ||
+			strings.Contains(err.Error(), "insufficient stock") {
+			writeError(
+				w,
+				http.StatusBadRequest,
+				err.Error(),
+			)
+			return
+		}
+
 		writeError(
 			w,
-			http.StatusBadRequest,
-			err.Error(),
+			http.StatusInternalServerError,
+			"failed to create order",
 		)
 		return
 	}

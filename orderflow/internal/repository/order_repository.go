@@ -3,26 +3,31 @@ package repository
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"orderflow/internal/failure"
 	"orderflow/internal/metrics"
 	"orderflow/internal/model"
 )
 
 type OrderRepository struct {
-	db      *pgxpool.Pool
-	metrics *metrics.Metrics
+	db        *pgxpool.Pool
+	metrics   *metrics.Metrics
+	simulator *failure.Simulator
 }
 
 func NewOrderRepository(
 	db *pgxpool.Pool,
 	metrics *metrics.Metrics,
+	simulator *failure.Simulator,
 ) *OrderRepository {
 	return &OrderRepository{
-		db:      db,
-		metrics: metrics,
+		db:        db,
+		metrics:   metrics,
+		simulator: simulator,
 	}
 }
 
@@ -30,6 +35,17 @@ func (r *OrderRepository) Create(
 	ctx context.Context,
 	order *model.Order,
 ) error {
+	if r.simulator.IsEnabled(failure.DBFailure) {
+		slog.Error(
+			"database operation failed: connection refused",
+			"operation", "create_order",
+			"dependency", "postgres",
+			"error", "database connection refused",
+		)
+
+		return fmt.Errorf("database connection refused")
+	}
+
 	start := time.Now()
 
 	defer func() {
