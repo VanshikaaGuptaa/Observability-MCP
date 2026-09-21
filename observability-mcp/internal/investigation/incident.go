@@ -6,17 +6,22 @@ import (
 )
 
 type Incident struct {
-	Service  string `json:"service"`
-	Severity string `json:"severity"`
-	Status   string `json:"status"`
-
+	Service  string   `json:"service"`
+	Severity string   `json:"severity"`
+	Status   string   `json:"status"`
+	Impact   Impact   `json:"impact"`
 	Symptoms []string `json:"symptoms"`
 
 	Evidence []Evidence `json:"evidence"`
 
 	Hypotheses []Hypothesis `json:"hypotheses"`
 }
-
+type Impact struct {
+	Detected      bool     `json:"detected"`
+	AffectedPaths []string `json:"affected_paths"`
+	HTTPErrorRate float64  `json:"http_error_rate"`
+	Description   string   `json:"description"`
+}
 type Evidence struct {
 	Source string `json:"source"`
 	Signal string `json:"signal"`
@@ -244,7 +249,69 @@ func BuildIncident(
 			break
 		}
 	}
+	for _, dependency := range investigation.Dependencies {
 
+		if dependency.Status != "degraded" {
+			continue
+		}
+
+		incident.Evidence = append(
+			incident.Evidence,
+			Evidence{
+				Source: "dependency",
+				Signal: dependency.Name,
+				Value: map[string]any{
+					"status":      dependency.Status,
+					"error_count": dependency.ErrorCount,
+				},
+			},
+		)
+
+		incident.Symptoms = append(
+			incident.Symptoms,
+			fmt.Sprintf(
+				"Dependency %s is degraded",
+				dependency.Name,
+			),
+		)
+	}
+	incident.Impact.HTTPErrorRate =
+		investigation.Metrics.ErrorRate
+
+	if investigation.Metrics.ErrorRate > 0 {
+		incident.Impact.Detected = true
+
+		incident.Impact.Description =
+			"HTTP request failures detected"
+	}
+	for _, endpoint := range investigation.Impact.Endpoints {
+
+		if endpoint.Status == "unknown" {
+			continue
+		}
+
+		incident.Evidence = append(
+			incident.Evidence,
+			Evidence{
+				Source: "prometheus",
+				Signal: "endpoint_health",
+				Value:  endpoint,
+			},
+		)
+	}
+	if investigation.Impact.Detected {
+
+		for _, endpoint := range investigation.Impact.AffectedPaths {
+
+			incident.Symptoms = append(
+				incident.Symptoms,
+				fmt.Sprintf(
+					"Endpoint %s is degraded",
+					endpoint,
+				),
+			)
+		}
+	}
 	// --------------------------------------------------
 	// Hypothesis: recent deployment
 	// --------------------------------------------------

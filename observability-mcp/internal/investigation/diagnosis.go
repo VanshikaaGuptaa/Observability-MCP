@@ -191,6 +191,46 @@ func Diagnose(
 	// --------------------------------------------------
 
 	causes = uniqueStrings(causes)
+	for _, dependency := range investigation.Dependencies {
+
+		if dependency.Status != "degraded" {
+			continue
+		}
+
+		signals = append(
+			signals,
+			fmt.Sprintf(
+				"Dependency %s has %d recorded errors",
+				dependency.Name,
+				int(dependency.ErrorCount),
+			),
+		)
+
+		switch dependency.Name {
+
+		case "redis":
+			causes = append(
+				causes,
+				"Redis dependency degradation detected",
+			)
+
+		case "postgresql":
+			causes = append(
+				causes,
+				"PostgreSQL dependency degradation detected",
+			)
+
+		case "payment-provider":
+			causes = append(
+				causes,
+				"Payment provider degradation detected",
+			)
+		}
+
+		if result.Severity == "normal" {
+			result.Severity = "medium"
+		}
+	}
 
 	// --------------------------------------------------
 	// 7. Summary

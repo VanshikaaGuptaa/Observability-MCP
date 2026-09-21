@@ -42,10 +42,11 @@ type Investigation struct {
 		P99Latency  float64 `json:"p99_latency_seconds"`
 	} `json:"metrics"`
 
-	RecentErrors      []Error      `json:"recent_errors"`
-	RecentDeployments []Deployment `json:"recent_deployments"`
-
-	Diagnosis *Diagnosis `json:"diagnosis,omitempty"`
+	RecentErrors      []Error            `json:"recent_errors"`
+	RecentDeployments []Deployment       `json:"recent_deployments"`
+	Dependencies      []DependencyStatus `json:"dependencies"`
+	Impact            ImpactSummary      `json:"impact"`
+	Diagnosis         *Diagnosis         `json:"diagnosis,omitempty"`
 }
 
 type Error struct {
@@ -262,7 +263,42 @@ func (s *Service) Investigate(
 			)
 		}
 	}
+	for _, endpoint := range monitoredEndpoints {
 
+		endpointImpact, err := analyzeEndpoint(
+			ctx,
+			s.prometheus,
+			endpoint,
+			window,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		result.Impact.Endpoints = append(
+			result.Impact.Endpoints,
+			endpointImpact,
+		)
+
+		if endpointImpact.Status == "degraded" {
+
+			result.Impact.Detected = true
+
+			result.Impact.AffectedPaths = append(
+				result.Impact.AffectedPaths,
+				endpoint,
+			)
+		}
+	}
+
+	if result.Impact.Detected {
+		result.Impact.Description =
+			"One or more monitored endpoints are degraded."
+	} else {
+		result.Impact.Description =
+			"No endpoint-level degradation detected."
+	}
 	// --------------------------------------------------
 	// 7. Recent deployments
 	// --------------------------------------------------
@@ -299,6 +335,115 @@ func (s *Service) Investigate(
 			},
 		)
 	}
+	redisErrorQuery := `{service_name="orderflow"} | json | dependency="redis"`
+
+	redisResult, err := s.loki.QueryRange(
+		ctx,
+		redisErrorQuery,
+		start,
+		end,
+		100,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf(
+			"redis error query failed: %w",
+			err,
+		)
+	}
+
+	redisErrorCount := 0
+
+	for _, stream := range redisResult.Data.Result {
+		redisErrorCount += len(stream.Values)
+	}
+	redisStatus := "healthy"
+
+	if redisErrorCount > 0 {
+		redisStatus = "degraded"
+	}
+
+	result.Dependencies = append(
+		result.Dependencies,
+		DependencyStatus{
+			Name:       "redis",
+			Status:     redisStatus,
+			ErrorCount: float64(redisErrorCount),
+		},
+	)
+
+	databaseErrorQuery := `{service_name="orderflow"} | json | dependency="database"`
+
+	databaseResult, err := s.loki.QueryRange(
+		ctx,
+		databaseErrorQuery,
+		start,
+		end,
+		100,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf(
+			"database error query failed: %w",
+			err,
+		)
+	}
+
+	databaseErrorCount := 0
+
+	for _, stream := range databaseResult.Data.Result {
+		databaseErrorCount += len(stream.Values)
+	}
+
+	databaseStatus := "healthy"
+
+	if databaseErrorCount > 0 {
+		databaseStatus = "degraded"
+	}
+
+	result.Dependencies = append(
+		result.Dependencies,
+		DependencyStatus{
+			Name:       "postgresql",
+			Status:     databaseStatus,
+			ErrorCount: float64(databaseErrorCount),
+		},
+	)
+
+	paymentQuery := fmt.Sprintf(
+		`increase(orderflow_payment_failure_total[%s])`,
+		window,
+	)
+
+	paymentResult, err := s.prometheus.Query(
+		ctx,
+		paymentQuery,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf(
+			"payment failure query failed: %w",
+			err,
+		)
+	}
+
+	paymentFailures := extractScalar(paymentResult)
+
+	paymentStatus := "healthy"
+
+	if paymentFailures > 0 {
+		paymentStatus = "degraded"
+	}
+
+	result.Dependencies = append(
+		result.Dependencies,
+		DependencyStatus{
+			Name:       "payment-provider",
+			Status:     paymentStatus,
+			ErrorCount: paymentFailures,
+		},
+	)
+
 	result.Diagnosis = Diagnose(
 		result,
 		duration,
