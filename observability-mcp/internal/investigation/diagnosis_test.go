@@ -3,6 +3,8 @@ package investigation
 import (
 	"testing"
 	"time"
+
+	prom "observability-mcp/internal/prometheus"
 )
 
 func TestDiagnoseHealthyService(t *testing.T) {
@@ -12,10 +14,10 @@ func TestDiagnoseHealthyService(t *testing.T) {
 
 	investigation.Health.Status = "healthy"
 
-	investigation.Metrics.RequestRate = 0.5
-	investigation.Metrics.ErrorRate = 0
-	investigation.Metrics.P95Latency = 0.2
-	investigation.Metrics.P99Latency = 0.4
+	investigation.Metrics.RequestRate = prom.Float64Ptr(0.5)
+	investigation.Metrics.ErrorRate = prom.Float64Ptr(0.0)
+	investigation.Metrics.P95Latency = prom.Float64Ptr(0.2)
+	investigation.Metrics.P99Latency = prom.Float64Ptr(0.4)
 
 	result := Diagnose(
 		investigation,
@@ -40,14 +42,15 @@ func TestDiagnoseHealthyService(t *testing.T) {
 		)
 	}
 }
+
 func TestDiagnosePaymentFailure(t *testing.T) {
 	investigation := &Investigation{
 		Service: "orderflow",
 	}
 
-	investigation.Metrics.ErrorRate = 0.20
-	investigation.Metrics.P95Latency = 0.5
-	investigation.Metrics.P99Latency = 0.8
+	investigation.Metrics.ErrorRate = prom.Float64Ptr(0.20)
+	investigation.Metrics.P95Latency = prom.Float64Ptr(0.5)
+	investigation.Metrics.P99Latency = prom.Float64Ptr(0.8)
 
 	investigation.RecentErrors = []Error{
 		{
@@ -90,12 +93,13 @@ func TestDiagnosePaymentFailure(t *testing.T) {
 		)
 	}
 }
+
 func TestDiagnoseRedisFailure(t *testing.T) {
 	investigation := &Investigation{
 		Service: "orderflow",
 	}
 
-	investigation.Metrics.ErrorRate = 0.10
+	investigation.Metrics.ErrorRate = prom.Float64Ptr(0.10)
 
 	investigation.RecentErrors = []Error{
 		{
@@ -133,12 +137,13 @@ func TestDiagnoseRedisFailure(t *testing.T) {
 		)
 	}
 }
+
 func TestDiagnoseDatabaseFailure(t *testing.T) {
 	investigation := &Investigation{
 		Service: "orderflow",
 	}
 
-	investigation.Metrics.ErrorRate = 0.15
+	investigation.Metrics.ErrorRate = prom.Float64Ptr(0.15)
 
 	investigation.RecentErrors = []Error{
 		{
@@ -169,14 +174,15 @@ func TestDiagnoseDatabaseFailure(t *testing.T) {
 		)
 	}
 }
+
 func TestDiagnoseHighLatency(t *testing.T) {
 	investigation := &Investigation{
 		Service: "orderflow",
 	}
 
-	investigation.Metrics.ErrorRate = 0
-	investigation.Metrics.P95Latency = 1.5
-	investigation.Metrics.P99Latency = 3.2
+	investigation.Metrics.ErrorRate = prom.Float64Ptr(0.0)
+	investigation.Metrics.P95Latency = prom.Float64Ptr(1.5)
+	investigation.Metrics.P99Latency = prom.Float64Ptr(3.2)
 
 	result := Diagnose(
 		investigation,
@@ -206,13 +212,14 @@ func TestDiagnoseHighLatency(t *testing.T) {
 		)
 	}
 }
+
 func TestDiagnoseRecentDeploymentCorrelation(t *testing.T) {
 	investigation := &Investigation{
 		Service: "orderflow",
 	}
 
-	investigation.Metrics.ErrorRate = 0.10
-	investigation.Metrics.P99Latency = 2.5
+	investigation.Metrics.ErrorRate = prom.Float64Ptr(0.10)
+	investigation.Metrics.P99Latency = prom.Float64Ptr(2.5)
 
 	investigation.RecentDeployments = []Deployment{
 		{
@@ -232,10 +239,7 @@ func TestDiagnoseRecentDeploymentCorrelation(t *testing.T) {
 	found := false
 
 	for _, cause := range result.PossibleCauses {
-
-		if cause ==
-			"Recent deployment temporally correlates with elevated error rate" {
-
+		if cause == "Recent deployment temporally correlates with elevated error rate" {
 			found = true
 			break
 		}
@@ -246,5 +250,42 @@ func TestDiagnoseRecentDeploymentCorrelation(t *testing.T) {
 			"expected deployment correlation, got %v",
 			result.PossibleCauses,
 		)
+	}
+}
+
+func TestDiagnoseHistoricalRecovery(t *testing.T) {
+	investigation := &Investigation{
+		Service: "orderflow",
+	}
+	investigation.Metrics.ErrorRate = prom.Float64Ptr(0.0)
+	investigation.Dependencies = []DependencyStatus{
+		{
+			Name:                 "redis",
+			Status:               "healthy",
+			CurrentStatus:        "healthy",
+			WindowStatus:         "degraded",
+			HistoricalErrorCount: 21,
+			RecentErrorCount:     0,
+		},
+	}
+
+	result := Diagnose(
+		investigation,
+		10*time.Minute,
+	)
+
+	if result.Severity == "high" {
+		t.Fatalf("expected recovered dependency not to cause high severity, got %s", result.Severity)
+	}
+
+	foundHistoricalCause := false
+	for _, cause := range result.PossibleCauses {
+		if cause == "Historical redis dependency degradation detected (recovered)" {
+			foundHistoricalCause = true
+			break
+		}
+	}
+	if !foundHistoricalCause {
+		t.Fatalf("expected historical recovered cause, got %v", result.PossibleCauses)
 	}
 }

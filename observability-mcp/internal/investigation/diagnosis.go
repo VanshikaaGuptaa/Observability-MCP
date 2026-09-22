@@ -36,17 +36,17 @@ func Diagnose(
 	// 1. Error rate
 	// --------------------------------------------------
 
-	if investigation.Metrics.ErrorRate > 0 {
+	if investigation.Metrics.ErrorRate != nil && *investigation.Metrics.ErrorRate > 0 {
 		signals = append(
 			signals,
 			fmt.Sprintf(
 				"HTTP error rate is %.2f%%",
-				investigation.Metrics.ErrorRate*100,
+				*investigation.Metrics.ErrorRate*100,
 			),
 		)
 	}
 
-	if investigation.Metrics.ErrorRate >= 0.05 {
+	if investigation.Metrics.ErrorRate != nil && *investigation.Metrics.ErrorRate >= 0.05 {
 		result.Severity = "high"
 
 		causes = append(
@@ -59,22 +59,22 @@ func Diagnose(
 	// 2. Latency
 	// --------------------------------------------------
 
-	if investigation.Metrics.P95Latency >= 1 {
+	if investigation.Metrics.P95Latency != nil && *investigation.Metrics.P95Latency >= 1 {
 		signals = append(
 			signals,
 			fmt.Sprintf(
 				"P95 latency is %.2f seconds",
-				investigation.Metrics.P95Latency,
+				*investigation.Metrics.P95Latency,
 			),
 		)
 	}
 
-	if investigation.Metrics.P99Latency >= 2 {
+	if investigation.Metrics.P99Latency != nil && *investigation.Metrics.P99Latency >= 2 {
 		signals = append(
 			signals,
 			fmt.Sprintf(
 				"P99 latency is %.2f seconds",
-				investigation.Metrics.P99Latency,
+				*investigation.Metrics.P99Latency,
 			),
 		)
 
@@ -123,7 +123,7 @@ func Diagnose(
 					"Redis dependency errors detected",
 				)
 
-			case strings.Contains(message, "database"):
+			case strings.Contains(message, "database") || strings.Contains(message, "postgres"):
 				causes = append(
 					causes,
 					"Database errors detected",
@@ -169,7 +169,7 @@ func Diagnose(
 	// --------------------------------------------------
 
 	if len(deployments) > 0 &&
-		investigation.Metrics.ErrorRate >= 0.05 {
+		investigation.Metrics.ErrorRate != nil && *investigation.Metrics.ErrorRate >= 0.05 {
 
 		causes = append(
 			causes,
@@ -178,7 +178,7 @@ func Diagnose(
 	}
 
 	if len(deployments) > 0 &&
-		investigation.Metrics.P99Latency >= 2 {
+		investigation.Metrics.P99Latency != nil && *investigation.Metrics.P99Latency >= 2 {
 
 		causes = append(
 			causes,
@@ -187,53 +187,66 @@ func Diagnose(
 	}
 
 	// --------------------------------------------------
-	// 6. Deduplicate causes
+	// 6. Dependencies
 	// --------------------------------------------------
 
-	causes = uniqueStrings(causes)
 	for _, dependency := range investigation.Dependencies {
 
-		if dependency.Status != "degraded" {
-			continue
-		}
-
-		signals = append(
-			signals,
-			fmt.Sprintf(
-				"Dependency %s has %d recorded errors",
-				dependency.Name,
-				int(dependency.ErrorCount),
-			),
-		)
-
-		switch dependency.Name {
-
-		case "redis":
-			causes = append(
-				causes,
-				"Redis dependency degradation detected",
+		if dependency.CurrentStatus == "degraded" {
+			signals = append(
+				signals,
+				fmt.Sprintf(
+					"Dependency %s is currently degraded (%d recent errors)",
+					dependency.Name,
+					int(dependency.RecentErrorCount),
+				),
 			)
 
-		case "postgresql":
-			causes = append(
-				causes,
-				"PostgreSQL dependency degradation detected",
+			switch dependency.Name {
+			case "redis":
+				causes = append(causes, "Redis dependency degradation detected")
+			case "postgresql":
+				causes = append(causes, "PostgreSQL dependency degradation detected")
+			case "payment-provider":
+				causes = append(causes, "Payment provider degradation detected")
+			}
+
+			if result.Severity == "normal" {
+				result.Severity = "medium"
+			}
+		} else if dependency.WindowStatus == "degraded" {
+			signals = append(
+				signals,
+				fmt.Sprintf(
+					"Dependency %s experienced historical degradation (%d recorded errors in window, currently recovered)",
+					dependency.Name,
+					int(dependency.HistoricalErrorCount),
+				),
 			)
 
-		case "payment-provider":
 			causes = append(
 				causes,
-				"Payment provider degradation detected",
+				fmt.Sprintf("Historical %s dependency degradation detected (recovered)", dependency.Name),
 			)
-		}
-
-		if result.Severity == "normal" {
-			result.Severity = "medium"
+		} else if dependency.CurrentStatus == "unknown" {
+			signals = append(
+				signals,
+				fmt.Sprintf(
+					"Dependency %s status is unknown",
+					dependency.Name,
+				),
+			)
 		}
 	}
 
 	// --------------------------------------------------
-	// 7. Summary
+	// 7. Deduplicate causes
+	// --------------------------------------------------
+
+	causes = uniqueStrings(causes)
+
+	// --------------------------------------------------
+	// 8. Summary
 	// --------------------------------------------------
 
 	switch result.Severity {

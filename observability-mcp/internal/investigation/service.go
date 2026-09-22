@@ -3,6 +3,7 @@ package investigation
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	deployments "observability-mcp/internal/deployments"
@@ -36,10 +37,10 @@ type Investigation struct {
 	} `json:"health"`
 
 	Metrics struct {
-		RequestRate float64 `json:"request_rate"`
-		ErrorRate   float64 `json:"error_rate"`
-		P95Latency  float64 `json:"p95_latency_seconds"`
-		P99Latency  float64 `json:"p99_latency_seconds"`
+		RequestRate *float64 `json:"request_rate"`
+		ErrorRate   *float64 `json:"error_rate"`
+		P95Latency  *float64 `json:"p95_latency_seconds"`
+		P99Latency  *float64 `json:"p99_latency_seconds"`
 	} `json:"metrics"`
 
 	RecentErrors      []Error            `json:"recent_errors"`
@@ -47,6 +48,7 @@ type Investigation struct {
 	Dependencies      []DependencyStatus `json:"dependencies"`
 	Impact            ImpactSummary      `json:"impact"`
 	Diagnosis         *Diagnosis         `json:"diagnosis,omitempty"`
+	Timeline          []IncidentEvent    `json:"timeline"`
 }
 
 type Error struct {
@@ -83,10 +85,26 @@ func (s *Service) Investigate(
 	}
 
 	result := &Investigation{
-		Service: service,
+		Service:           service,
+		RecentErrors:      []Error{},
+		RecentDeployments: []Deployment{},
+		Dependencies:      []DependencyStatus{},
+		Timeline:          []IncidentEvent{},
+		Impact: ImpactSummary{
+			AffectedPaths: []string{},
+			Endpoints:     []EndpointImpact{},
+		},
 	}
 
 	window := formatDuration(duration)
+	end := time.Now()
+	start := end.Add(-duration)
+
+	recentWindowDuration := 2 * time.Minute
+	if duration < recentWindowDuration {
+		recentWindowDuration = duration / 2
+	}
+	recentCutoff := end.Add(-recentWindowDuration)
 
 	// --------------------------------------------------
 	// 1. Service health
@@ -98,23 +116,17 @@ func (s *Service) Investigate(
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf(
-			"health query failed: %w",
-			err,
-		)
-	}
-
-	if len(healthResult.Data.Result) > 0 &&
-		len(healthResult.Data.Result[0].Value) >= 2 {
-
-		value := fmt.Sprint(
-			healthResult.Data.Result[0].Value[1],
-		)
-
-		if value == "1" {
-			result.Health.Status = "healthy"
+		result.Health.Status = "unknown"
+	} else if len(healthResult.Data.Result) > 0 && len(healthResult.Data.Result[0].Value) >= 2 {
+		val, parseErr := prom.ExtractScalar(healthResult)
+		if parseErr == nil && val != nil {
+			if *val == 1.0 {
+				result.Health.Status = "healthy"
+			} else {
+				result.Health.Status = "down"
+			}
 		} else {
-			result.Health.Status = "down"
+			result.Health.Status = "unknown"
 		}
 	} else {
 		result.Health.Status = "unknown"
@@ -141,9 +153,11 @@ func (s *Service) Investigate(
 		)
 	}
 
-	result.Metrics.RequestRate = extractScalar(
-		requestRateResult,
-	)
+	reqRate, err := prom.ExtractScalar(requestRateResult)
+	if err != nil {
+		return nil, fmt.Errorf("parse request rate: %w", err)
+	}
+	result.Metrics.RequestRate = reqRate
 
 	// --------------------------------------------------
 	// 3. Error rate
@@ -167,9 +181,11 @@ func (s *Service) Investigate(
 		)
 	}
 
-	result.Metrics.ErrorRate = extractScalar(
-		errorRateResult,
-	)
+	errRate, err := prom.ExtractScalar(errorRateResult)
+	if err != nil {
+		return nil, fmt.Errorf("parse error rate: %w", err)
+	}
+	result.Metrics.ErrorRate = errRate
 
 	// --------------------------------------------------
 	// 4. P95 latency
@@ -192,9 +208,11 @@ func (s *Service) Investigate(
 		)
 	}
 
-	result.Metrics.P95Latency = extractScalar(
-		p95Result,
-	)
+	p95, err := prom.ExtractScalar(p95Result)
+	if err != nil {
+		return nil, fmt.Errorf("parse P95 latency: %w", err)
+	}
+	result.Metrics.P95Latency = p95
 
 	// --------------------------------------------------
 	// 5. P99 latency
@@ -217,16 +235,15 @@ func (s *Service) Investigate(
 		)
 	}
 
-	result.Metrics.P99Latency = extractScalar(
-		p99Result,
-	)
+	p99, err := prom.ExtractScalar(p99Result)
+	if err != nil {
+		return nil, fmt.Errorf("parse P99 latency: %w", err)
+	}
+	result.Metrics.P99Latency = p99
 
 	// --------------------------------------------------
 	// 6. Recent errors from Loki
 	// --------------------------------------------------
-
-	end := time.Now()
-	start := end.Add(-duration)
 
 	logQuery := `{service_name="orderflow"} | json | level="ERROR"`
 
@@ -238,40 +255,36 @@ func (s *Service) Investigate(
 		50,
 	)
 
-	if err != nil {
-		return nil, fmt.Errorf(
-			"recent errors query failed: %w",
-			err,
-		)
-	}
+	if err == nil && logResult != nil {
+		for _, stream := range logResult.Data.Result {
+			for _, value := range stream.Values {
+				if len(value) < 2 {
+					continue
+				}
 
-	for _, stream := range logResult.Data.Result {
-
-		for _, value := range stream.Values {
-
-			if len(value) < 2 {
-				continue
+				result.RecentErrors = append(
+					result.RecentErrors,
+					Error{
+						Timestamp: value[0],
+						Level:     "ERROR",
+						Message:   value[1],
+					},
+				)
 			}
-
-			result.RecentErrors = append(
-				result.RecentErrors,
-				Error{
-					Timestamp: value[0],
-					Level:     "ERROR",
-					Message:   value[1],
-				},
-			)
 		}
 	}
-	for _, endpoint := range monitoredEndpoints {
 
+	// --------------------------------------------------
+	// 7. Impact on monitored endpoints
+	// --------------------------------------------------
+
+	for _, endpoint := range monitoredEndpoints {
 		endpointImpact, err := analyzeEndpoint(
 			ctx,
 			s.prometheus,
 			endpoint,
 			window,
 		)
-
 		if err != nil {
 			return nil, err
 		}
@@ -282,9 +295,7 @@ func (s *Service) Investigate(
 		)
 
 		if endpointImpact.Status == "degraded" {
-
 			result.Impact.Detected = true
-
 			result.Impact.AffectedPaths = append(
 				result.Impact.AffectedPaths,
 				endpoint,
@@ -293,50 +304,44 @@ func (s *Service) Investigate(
 	}
 
 	if result.Impact.Detected {
-		result.Impact.Description =
-			"One or more monitored endpoints are degraded."
+		result.Impact.Description = "One or more monitored endpoints are degraded."
 	} else {
-		result.Impact.Description =
-			"No endpoint-level degradation detected."
+		result.Impact.Description = "No endpoint-level degradation detected."
 	}
+
 	// --------------------------------------------------
-	// 7. Recent deployments
+	// 8. Recent deployments
 	// --------------------------------------------------
 
-	deploymentList, err := s.deployments.GetDeployments(
-		ctx,
-	)
+	deploymentList, err := s.deployments.GetDeployments(ctx)
+	if err == nil {
+		for _, deployment := range deploymentList {
+			if deployment.Service != service {
+				continue
+			}
 
-	if err != nil {
-		return nil, fmt.Errorf(
-			"deployment query failed: %w",
-			err,
-		)
+			if deployment.Timestamp.Before(start) {
+				continue
+			}
+
+			result.RecentDeployments = append(
+				result.RecentDeployments,
+				Deployment{
+					ID:          deployment.ID,
+					Version:     deployment.Version,
+					Environment: deployment.Environment,
+					Timestamp:   deployment.Timestamp,
+					Status:      deployment.Status,
+				},
+			)
+		}
 	}
 
-	for _, deployment := range deploymentList {
+	// --------------------------------------------------
+	// 9. Dependency: Redis
+	// --------------------------------------------------
 
-		if deployment.Service != service {
-			continue
-		}
-
-		if deployment.Timestamp.Before(start) {
-			continue
-		}
-
-		result.RecentDeployments = append(
-			result.RecentDeployments,
-			Deployment{
-				ID:          deployment.ID,
-				Version:     deployment.Version,
-				Environment: deployment.Environment,
-				Timestamp:   deployment.Timestamp,
-				Status:      deployment.Status,
-			},
-		)
-	}
 	redisErrorQuery := `{service_name="orderflow"} | json | dependency="redis"`
-
 	redisResult, err := s.loki.QueryRange(
 		ctx,
 		redisErrorQuery,
@@ -346,34 +351,62 @@ func (s *Service) Investigate(
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf(
-			"redis error query failed: %w",
-			err,
+		result.Dependencies = append(
+			result.Dependencies,
+			DependencyStatus{
+				Name:          "redis",
+				Status:        "unknown",
+				CurrentStatus: "unknown",
+				WindowStatus:  "unknown",
+			},
+		)
+	} else {
+		var redisHistoricalCount float64
+		var redisRecentCount float64
+
+		for _, stream := range redisResult.Data.Result {
+			for _, val := range stream.Values {
+				if len(val) < 2 {
+					continue
+				}
+				redisHistoricalCount++
+				if tsNano, parseErr := strconv.ParseInt(val[0], 10, 64); parseErr == nil {
+					t := time.Unix(0, tsNano)
+					if t.After(recentCutoff) {
+						redisRecentCount++
+					}
+				}
+			}
+		}
+
+		redisCurrentStatus := "healthy"
+		redisWindowStatus := "healthy"
+		if redisHistoricalCount > 0 {
+			redisWindowStatus = "degraded"
+		}
+		if redisRecentCount > 0 {
+			redisCurrentStatus = "degraded"
+		}
+
+		result.Dependencies = append(
+			result.Dependencies,
+			DependencyStatus{
+				Name:                 "redis",
+				Status:               redisCurrentStatus,
+				CurrentStatus:        redisCurrentStatus,
+				WindowStatus:         redisWindowStatus,
+				HistoricalErrorCount: redisHistoricalCount,
+				ErrorCount:           redisHistoricalCount,
+				RecentErrorCount:     redisRecentCount,
+			},
 		)
 	}
 
-	redisErrorCount := 0
-
-	for _, stream := range redisResult.Data.Result {
-		redisErrorCount += len(stream.Values)
-	}
-	redisStatus := "healthy"
-
-	if redisErrorCount > 0 {
-		redisStatus = "degraded"
-	}
-
-	result.Dependencies = append(
-		result.Dependencies,
-		DependencyStatus{
-			Name:       "redis",
-			Status:     redisStatus,
-			ErrorCount: float64(redisErrorCount),
-		},
-	)
+	// --------------------------------------------------
+	// 10. Dependency: PostgreSQL (database)
+	// --------------------------------------------------
 
 	databaseErrorQuery := `{service_name="orderflow"} | json | dependency="database"`
-
 	databaseResult, err := s.loki.QueryRange(
 		ctx,
 		databaseErrorQuery,
@@ -383,71 +416,159 @@ func (s *Service) Investigate(
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf(
-			"database error query failed: %w",
-			err,
+		result.Dependencies = append(
+			result.Dependencies,
+			DependencyStatus{
+				Name:          "postgresql",
+				Status:        "unknown",
+				CurrentStatus: "unknown",
+				WindowStatus:  "unknown",
+			},
+		)
+	} else {
+		var dbHistoricalCount float64
+		var dbRecentCount float64
+
+		for _, stream := range databaseResult.Data.Result {
+			for _, val := range stream.Values {
+				if len(val) < 2 {
+					continue
+				}
+				dbHistoricalCount++
+				if tsNano, parseErr := strconv.ParseInt(val[0], 10, 64); parseErr == nil {
+					t := time.Unix(0, tsNano)
+					if t.After(recentCutoff) {
+						dbRecentCount++
+					}
+				}
+			}
+		}
+
+		dbCurrentStatus := "healthy"
+		dbWindowStatus := "healthy"
+		if dbHistoricalCount > 0 {
+			dbWindowStatus = "degraded"
+		}
+		if dbRecentCount > 0 {
+			dbCurrentStatus = "degraded"
+		}
+
+		result.Dependencies = append(
+			result.Dependencies,
+			DependencyStatus{
+				Name:                 "postgresql",
+				Status:               dbCurrentStatus,
+				CurrentStatus:        dbCurrentStatus,
+				WindowStatus:         dbWindowStatus,
+				HistoricalErrorCount: dbHistoricalCount,
+				ErrorCount:           dbHistoricalCount,
+				RecentErrorCount:     dbRecentCount,
+			},
 		)
 	}
 
-	databaseErrorCount := 0
-
-	for _, stream := range databaseResult.Data.Result {
-		databaseErrorCount += len(stream.Values)
-	}
-
-	databaseStatus := "healthy"
-
-	if databaseErrorCount > 0 {
-		databaseStatus = "degraded"
-	}
-
-	result.Dependencies = append(
-		result.Dependencies,
-		DependencyStatus{
-			Name:       "postgresql",
-			Status:     databaseStatus,
-			ErrorCount: float64(databaseErrorCount),
-		},
-	)
+	// --------------------------------------------------
+	// 11. Dependency: Payment Provider
+	// --------------------------------------------------
 
 	paymentQuery := fmt.Sprintf(
 		`increase(orderflow_payment_failure_total[%s])`,
 		window,
 	)
-
-	paymentResult, err := s.prometheus.Query(
-		ctx,
-		paymentQuery,
+	paymentRecentQuery := fmt.Sprintf(
+		`increase(orderflow_payment_failure_total[%s])`,
+		formatDuration(recentWindowDuration),
 	)
 
-	if err != nil {
-		return nil, fmt.Errorf(
-			"payment failure query failed: %w",
-			err,
+	paymentResult, pErr1 := s.prometheus.Query(ctx, paymentQuery)
+	paymentRecentResult, pErr2 := s.prometheus.Query(ctx, paymentRecentQuery)
+
+	if pErr1 != nil && pErr2 != nil {
+		result.Dependencies = append(
+			result.Dependencies,
+			DependencyStatus{
+				Name:          "payment-provider",
+				Status:        "unknown",
+				CurrentStatus: "unknown",
+				WindowStatus:  "unknown",
+			},
+		)
+	} else {
+		windowFailures, _ := prom.ExtractScalar(paymentResult)
+		recentFailures, _ := prom.ExtractScalar(paymentRecentResult)
+
+		var histCount float64
+		var recCount float64
+		if windowFailures != nil {
+			histCount = *windowFailures
+		}
+		if recentFailures != nil {
+			recCount = *recentFailures
+		}
+
+		// Also check Loki for payment errors
+		paymentLokiQuery := `{service_name="orderflow"} | json | dependency="payment"`
+		if payLokiRes, payLokiErr := s.loki.QueryRange(ctx, paymentLokiQuery, start, end, 100); payLokiErr == nil && payLokiRes != nil {
+			var lokiHist float64
+			var lokiRec float64
+			for _, stream := range payLokiRes.Data.Result {
+				for _, val := range stream.Values {
+					if len(val) < 2 {
+						continue
+					}
+					lokiHist++
+					if tsNano, parseErr := strconv.ParseInt(val[0], 10, 64); parseErr == nil {
+						if time.Unix(0, tsNano).After(recentCutoff) {
+							lokiRec++
+						}
+					}
+				}
+			}
+			if lokiHist > histCount {
+				histCount = lokiHist
+			}
+			if lokiRec > recCount {
+				recCount = lokiRec
+			}
+		}
+
+		paymentCurrentStatus := "healthy"
+		paymentWindowStatus := "healthy"
+		if histCount > 0 {
+			paymentWindowStatus = "degraded"
+		}
+		if recCount > 0 {
+			paymentCurrentStatus = "degraded"
+		}
+
+		result.Dependencies = append(
+			result.Dependencies,
+			DependencyStatus{
+				Name:                 "payment-provider",
+				Status:               paymentCurrentStatus,
+				CurrentStatus:        paymentCurrentStatus,
+				WindowStatus:         paymentWindowStatus,
+				HistoricalErrorCount: histCount,
+				ErrorCount:           histCount,
+				RecentErrorCount:     recCount,
+			},
 		)
 	}
 
-	paymentFailures := extractScalar(paymentResult)
-
-	paymentStatus := "healthy"
-
-	if paymentFailures > 0 {
-		paymentStatus = "degraded"
-	}
-
-	result.Dependencies = append(
-		result.Dependencies,
-		DependencyStatus{
-			Name:       "payment-provider",
-			Status:     paymentStatus,
-			ErrorCount: paymentFailures,
-		},
-	)
+	// --------------------------------------------------
+	// 12. Diagnosis & Timeline
+	// --------------------------------------------------
 
 	result.Diagnosis = Diagnose(
 		result,
 		duration,
 	)
+
+	result.Timeline = BuildTimeline(
+		result,
+		duration,
+	)
+
 	return result, nil
 }
 
@@ -465,23 +586,4 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%ds", d/time.Second)
 	}
 	return d.String()
-}
-
-func extractScalar(resp *prom.QueryResponse) float64 {
-	if resp == nil || len(resp.Data.Result) == 0 {
-		return 0
-	}
-	val := resp.Data.Result[0].Value
-	if len(val) < 2 {
-		return 0
-	}
-	valStr, ok := val[1].(string)
-	if !ok {
-		return 0
-	}
-	var scalar float64
-	if _, err := fmt.Sscanf(valStr, "%f", &scalar); err != nil {
-		return 0
-	}
-	return scalar
 }

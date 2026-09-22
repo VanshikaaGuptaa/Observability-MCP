@@ -6,22 +6,23 @@ import (
 )
 
 type Incident struct {
-	Service  string   `json:"service"`
-	Severity string   `json:"severity"`
-	Status   string   `json:"status"`
-	Impact   Impact   `json:"impact"`
-	Symptoms []string `json:"symptoms"`
-
-	Evidence []Evidence `json:"evidence"`
-
-	Hypotheses []Hypothesis `json:"hypotheses"`
+	Service    string          `json:"service"`
+	Severity   string          `json:"severity"`
+	Status     string          `json:"status"`
+	Impact     Impact          `json:"impact"`
+	Symptoms   []string        `json:"symptoms"`
+	Evidence   []Evidence      `json:"evidence"`
+	Hypotheses []Hypothesis    `json:"hypotheses"`
+	Timeline   []IncidentEvent `json:"timeline"`
 }
+
 type Impact struct {
 	Detected      bool     `json:"detected"`
 	AffectedPaths []string `json:"affected_paths"`
-	HTTPErrorRate float64  `json:"http_error_rate"`
+	HTTPErrorRate *float64 `json:"http_error_rate"`
 	Description   string   `json:"description"`
 }
+
 type Evidence struct {
 	Source string `json:"source"`
 	Signal string `json:"signal"`
@@ -45,9 +46,18 @@ func BuildIncident(
 		return nil
 	}
 	incident := &Incident{
-		Service:  investigation.Service,
-		Severity: investigation.Diagnosis.Severity,
-		Status:   "healthy",
+		Service:    investigation.Service,
+		Severity:   investigation.Diagnosis.Severity,
+		Status:     "healthy",
+		Symptoms:   []string{},
+		Evidence:   []Evidence{},
+		Hypotheses: []Hypothesis{},
+		Timeline:   investigation.Timeline,
+		Impact: Impact{
+			AffectedPaths: []string{},
+			HTTPErrorRate: investigation.Metrics.ErrorRate,
+			Description:   "No endpoint-level degradation detected.",
+		},
 	}
 
 	// --------------------------------------------------
@@ -67,24 +77,24 @@ func BuildIncident(
 	// Error-rate evidence
 	// --------------------------------------------------
 
-	if investigation.Metrics.ErrorRate > 0 {
+	if investigation.Metrics.ErrorRate != nil && *investigation.Metrics.ErrorRate > 0 {
 
 		incident.Evidence = append(
 			incident.Evidence,
 			Evidence{
 				Source: "prometheus",
 				Signal: "error_rate",
-				Value:  investigation.Metrics.ErrorRate,
+				Value:  *investigation.Metrics.ErrorRate,
 			},
 		)
 
-		if investigation.Metrics.ErrorRate >= 0.05 {
+		if *investigation.Metrics.ErrorRate >= 0.05 {
 
 			incident.Symptoms = append(
 				incident.Symptoms,
 				fmt.Sprintf(
 					"Elevated HTTP error rate: %.2f%%",
-					investigation.Metrics.ErrorRate*100,
+					*investigation.Metrics.ErrorRate*100,
 				),
 			)
 		}
@@ -94,36 +104,36 @@ func BuildIncident(
 	// Latency evidence
 	// --------------------------------------------------
 
-	if investigation.Metrics.P95Latency > 0 {
+	if investigation.Metrics.P95Latency != nil && *investigation.Metrics.P95Latency > 0 {
 
 		incident.Evidence = append(
 			incident.Evidence,
 			Evidence{
 				Source: "prometheus",
 				Signal: "p95_latency",
-				Value:  investigation.Metrics.P95Latency,
+				Value:  *investigation.Metrics.P95Latency,
 			},
 		)
 	}
 
-	if investigation.Metrics.P99Latency > 0 {
+	if investigation.Metrics.P99Latency != nil && *investigation.Metrics.P99Latency > 0 {
 
 		incident.Evidence = append(
 			incident.Evidence,
 			Evidence{
 				Source: "prometheus",
 				Signal: "p99_latency",
-				Value:  investigation.Metrics.P99Latency,
+				Value:  *investigation.Metrics.P99Latency,
 			},
 		)
 
-		if investigation.Metrics.P99Latency >= 2 {
+		if *investigation.Metrics.P99Latency >= 2 {
 
 			incident.Symptoms = append(
 				incident.Symptoms,
 				fmt.Sprintf(
 					"High P99 latency: %.2fs",
-					investigation.Metrics.P99Latency,
+					*investigation.Metrics.P99Latency,
 				),
 			)
 		}
@@ -233,7 +243,7 @@ func BuildIncident(
 
 		message := strings.ToLower(err.Message)
 
-		if strings.Contains(message, "database") {
+		if strings.Contains(message, "database") || strings.Contains(message, "postgres") {
 
 			incident.Hypotheses = append(
 				incident.Hypotheses,
@@ -249,41 +259,91 @@ func BuildIncident(
 			break
 		}
 	}
+
+	// --------------------------------------------------
+	// Dependencies: evidence & symptoms
+	// --------------------------------------------------
+
 	for _, dependency := range investigation.Dependencies {
 
-		if dependency.Status != "degraded" {
-			continue
-		}
-
-		incident.Evidence = append(
-			incident.Evidence,
-			Evidence{
-				Source: "dependency",
-				Signal: dependency.Name,
-				Value: map[string]any{
-					"status":      dependency.Status,
-					"error_count": dependency.ErrorCount,
+		if dependency.CurrentStatus == "degraded" {
+			incident.Evidence = append(
+				incident.Evidence,
+				Evidence{
+					Source: "dependency",
+					Signal: dependency.Name,
+					Value: map[string]any{
+						"current_status": dependency.CurrentStatus,
+						"window_status":  dependency.WindowStatus,
+						"error_count":    dependency.HistoricalErrorCount,
+						"recent_errors":  dependency.RecentErrorCount,
+					},
 				},
-			},
-		)
+			)
 
-		incident.Symptoms = append(
-			incident.Symptoms,
-			fmt.Sprintf(
-				"Dependency %s is degraded",
-				dependency.Name,
-			),
-		)
+			incident.Symptoms = append(
+				incident.Symptoms,
+				fmt.Sprintf(
+					"Dependency %s is currently degraded",
+					dependency.Name,
+				),
+			)
+
+			incident.Hypotheses = append(
+				incident.Hypotheses,
+				Hypothesis{
+					Cause:      fmt.Sprintf("%s dependency failure", dependency.Name),
+					Confidence: "supported",
+					Evidence: []string{
+						fmt.Sprintf("Active error rate detected on %s dependency", dependency.Name),
+					},
+				},
+			)
+		} else if dependency.WindowStatus == "degraded" {
+			incident.Evidence = append(
+				incident.Evidence,
+				Evidence{
+					Source: "dependency",
+					Signal: dependency.Name,
+					Value: map[string]any{
+						"current_status": dependency.CurrentStatus,
+						"window_status":  dependency.WindowStatus,
+						"error_count":    dependency.HistoricalErrorCount,
+						"recent_errors":  dependency.RecentErrorCount,
+					},
+				},
+			)
+
+			incident.Symptoms = append(
+				incident.Symptoms,
+				fmt.Sprintf(
+					"Dependency %s experienced degradation earlier in window (recovered)",
+					dependency.Name,
+				),
+			)
+
+			incident.Hypotheses = append(
+				incident.Hypotheses,
+				Hypothesis{
+					Cause:      fmt.Sprintf("historical %s dependency failure", dependency.Name),
+					Confidence: "resolved",
+					Evidence: []string{
+						fmt.Sprintf("Historical errors on %s recorded, but dependency is now healthy", dependency.Name),
+					},
+				},
+			)
+		}
 	}
-	incident.Impact.HTTPErrorRate =
-		investigation.Metrics.ErrorRate
 
-	if investigation.Metrics.ErrorRate > 0 {
+	// --------------------------------------------------
+	// Impact summary
+	// --------------------------------------------------
+
+	if investigation.Metrics.ErrorRate != nil && *investigation.Metrics.ErrorRate > 0 {
 		incident.Impact.Detected = true
-
-		incident.Impact.Description =
-			"HTTP request failures detected"
+		incident.Impact.Description = "HTTP request failures detected"
 	}
+
 	for _, endpoint := range investigation.Impact.Endpoints {
 
 		if endpoint.Status == "unknown" {
@@ -299,8 +359,9 @@ func BuildIncident(
 			},
 		)
 	}
-	if investigation.Impact.Detected {
 
+	if investigation.Impact.Detected {
+		incident.Impact.AffectedPaths = investigation.Impact.AffectedPaths
 		for _, endpoint := range investigation.Impact.AffectedPaths {
 
 			incident.Symptoms = append(
@@ -312,14 +373,17 @@ func BuildIncident(
 			)
 		}
 	}
+
 	// --------------------------------------------------
 	// Hypothesis: recent deployment
 	// --------------------------------------------------
 
 	if len(investigation.RecentDeployments) > 0 {
 
-		if investigation.Metrics.ErrorRate >= 0.05 ||
-			investigation.Metrics.P99Latency >= 2 {
+		hasHighError := investigation.Metrics.ErrorRate != nil && *investigation.Metrics.ErrorRate >= 0.05
+		hasHighLatency := investigation.Metrics.P99Latency != nil && *investigation.Metrics.P99Latency >= 2
+
+		if hasHighError || hasHighLatency {
 
 			for _, deployment := range investigation.RecentDeployments {
 
