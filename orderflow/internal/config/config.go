@@ -25,13 +25,13 @@ func Load() Config {
 		AppName: getEnv("APP_NAME", "order-service"),
 		AppPort: getEnv("APP_PORT", "8080"),
 
-		DBHost:     getEnv("DB_HOST", "localhost"),
+		DBHost:     getEnv("DB_HOST", "postgres"),
 		DBPort:     getEnv("DB_PORT", "5432"),
 		DBName:     getEnv("DB_NAME", "orderflow"),
 		DBUser:     getEnv("DB_USER", "orderflow"),
 		DBPassword: getEnv("DB_PASSWORD", "orderflow_password"),
 
-		RedisHost: getEnv("REDIS_HOST", "localhost"),
+		RedisHost: getEnv("REDIS_HOST", "redis"),
 		RedisPort: getEnv("REDIS_PORT", "6379"),
 
 		LogLevel: getEnv("LOG_LEVEL", "INFO"),

@@ -96,5 +96,5 @@ The service will start by default on port `8080`.
 ## 🗄️ Database Migrations
 Migrations are located in `migrations/`. To apply them to your PostgreSQL database:
 ```bash
-psql -h localhost -U postgres -d orderflow_db -f migrations/001_init.sql
+psql -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -f migrations/001_init.sql
 ```

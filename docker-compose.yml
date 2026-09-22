@@ -25,7 +25,7 @@ services:
           "wget",
           "--spider",
           "-q",
-          "http://localhost:8080/api/health"
+          "http://${ORDERFLOW_HOST}:${APP_PORT}/api/health"
         ]
       interval: 10s
       timeout: 5s
@@ -125,7 +125,7 @@ services:
           "wget",
           "--spider",
           "-q",
-          "http://localhost:9090/-/healthy"
+          "http://${PROMETHEUS_HOST}:${PROMETHEUS_PORT}/-/healthy"
         ]
       interval: 10s
       timeout: 5s
