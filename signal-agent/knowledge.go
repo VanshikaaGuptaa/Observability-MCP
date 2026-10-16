@@ -120,17 +120,25 @@ func FindKnowledge(evidence any) []KnowledgeArticle {
 	}
 
 	// PostgreSQL: require actual connection failure evidence.
-	if strings.Contains(raw, "connection refused") ||
-		strings.Contains(raw, "database connection refused") {
-		add(runbooks[0], "connection refused")
-	}
+	// PostgreSQL: match explicit database connection failures.
+if strings.Contains(raw, "connection refused") ||
+    strings.Contains(raw, "database connection failed") ||
+    strings.Contains(raw, "postgresql connection failed") ||
+    strings.Contains(raw, "postgres connection failed") {
+    add(runbooks[0], "PostgreSQL connection failure detected")
+}
 
 	// Redis: require specific Redis failure evidence.
-	if strings.Contains(raw, "redis_failure") ||
-		strings.Contains(raw, "redis connection refused") ||
-		strings.Contains(raw, "redis connectivity failed") {
-		add(runbooks[1], "redis failure evidence")
-	}
+	// Redis: match explicit dependency degradation or Redis failures.
+if strings.Contains(raw, "redis_failure") ||
+    strings.Contains(raw, "redis connection refused") ||
+    strings.Contains(raw, "redis connectivity failed") ||
+    strings.Contains(raw, `"current_status":"degraded"`) &&
+        strings.Contains(raw, "redis") ||
+    strings.Contains(raw, `"window_status":"degraded"`) &&
+        strings.Contains(raw, "redis") {
+    add(runbooks[1], "Redis dependency degraded or failure detected")
+}
 
 	// Payments: require payment-specific failure evidence.
 	if strings.Contains(raw, "payment_failure") ||
