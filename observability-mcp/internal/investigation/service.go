@@ -406,7 +406,7 @@ func (s *Service) Investigate(
 	// 10. Dependency: PostgreSQL (database)
 	// --------------------------------------------------
 
-	databaseErrorQuery := `{service_name="orderflow"} | json | dependency="database"`
+	databaseErrorQuery := `{service_name="orderflow"} | json | dependency="postgres"`
 	databaseResult, err := s.loki.QueryRange(
 		ctx,
 		databaseErrorQuery,

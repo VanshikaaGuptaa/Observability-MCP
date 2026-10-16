@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-
+	"log/slog"
 	"orderflow/internal/model"
 	"orderflow/internal/service"
 )
@@ -56,12 +56,19 @@ func (h *OrderHandler) CreateOrder(
 			return
 		}
 
-		writeError(
-			w,
-			http.StatusInternalServerError,
-			"failed to create order",
-		)
-		return
+		slog.Error(
+    "failed to create order",
+    "error", err,
+    "method", r.Method,
+    "path", r.URL.Path,
+)
+
+writeError(
+    w,
+    http.StatusInternalServerError,
+    "failed to create order",
+)
+return
 	}
 
 	writeJSON(
