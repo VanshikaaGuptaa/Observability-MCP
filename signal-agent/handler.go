@@ -131,23 +131,26 @@ status := strings.ToLower(
     fmt.Sprint(evidenceStatus(evidence)),
 )
 
-if len(known) == 0 &&
+specificMatch := hasSpecificRunbook(known)
+
+if !specificMatch &&
     len(saved) == 0 &&
     aiSucceeded &&
     status != "healthy" &&
     status != "normal" {
-	article := BuildLearnedKnowledge(
-		req.Service,
-		evidence,
-		explanation,
-	)
 
-	if err := SaveKnowledgeArticle(article); err != nil {
-		log.Printf("Failed to save knowledge article: %v", err)
-	} else {
-		knowledge = append(knowledge, article)
-		log.Printf("Saved new knowledge article: %s", article.Title)
-	}
+    article := BuildLearnedKnowledge(
+        req.Service,
+        evidence,
+        explanation,
+    )
+
+    if err := SaveKnowledgeArticle(article); err != nil {
+        log.Printf("Failed to save knowledge article: %v", err)
+    } else {
+        knowledge = append(knowledge, article)
+        log.Printf("Saved new knowledge article: %s", article.Title)
+    }
 }
 
 
@@ -160,4 +163,15 @@ if len(known) == 0 &&
 		DurationMS:    time.Since(start).Milliseconds(),
 		Knowledge: knowledge,
 	})
+}
+func hasSpecificRunbook(articles []KnowledgeArticle) bool {
+    for _, article := range articles {
+        switch article.Title {
+        case "PostgreSQL Connection Failure",
+            "Redis Connectivity and Cache Failures",
+            "Payment Processing Failures":
+            return true
+        }
+    }
+    return false
 }

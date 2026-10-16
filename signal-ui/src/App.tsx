@@ -6,6 +6,8 @@ import type {
   KnowledgeArticle,
 } from "./types";
 import "./style.css";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const scenarios: { value: FailureScenario; label: string }[] = [
   { value: "normal", label: "Normal" },
@@ -313,10 +315,11 @@ async function investigate() {
 
             {result ? (
               <>
-                <div className="summary-callout">
-                  <span className="summary-icon">✦</span>
-                  <p>{result.ai_explanation}</p>
-                </div>
+                <div className="ai-markdown">
+  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+    {result.ai_explanation}
+  </ReactMarkdown>
+</div>
 
                 <div className="summary-footer">
   <span>Service: {result.service}</span>

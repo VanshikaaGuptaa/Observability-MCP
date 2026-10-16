@@ -1,1 +1,17 @@
-[]
+[
+  {
+    "title": "Learned Incident: orderflow incident",
+    "summary": "### Summary\nThe `orderflow` service is in a degraded state (severity: high) with an overall HTTP error rate of 25.64% over a 10-minute window. The `/api/orders` endpoint is experiencing a 100% error rate, directly coinciding with errors and degradation on the `postgresql` dependency.\n\n---\n\n### Observed evidence\n- **Service Status:** `orderflow` is marked `degraded` with severity `high`.\n- **Error Rates:** Overall service error rate is 25.64% (`0.2564`). The `/api/orders` endpoint has an error rate of 100% (`1.0`) at a request rate of ~0.034 req/s.\n- **Latency:** Overall p95 latency is ~0.046s; p99 is ~0.061s. For `/api/orders`, p95 is 0.05s and p99 is ~0.09s.\n- **Logs:** 40 error logs recorded in Loki.\n- **Dependency Status:** Dependency `postgresql` is `degraded` with 20 recorded errors / recent errors.\n- **Timeline:** Critical `dependency_error` logged at `2026-10-16T18:06:37.297578796+05:30` citing \"Database errors detected\" affecting `/api/orders`.\n\n---\n\n### Leading hypothesis\nThe `postgresql` dependency is failing or rejecting queries, directly causing the `/api/orders` endpoint to fail all requests (100% error rate) and driving the overall service error rate to 25.64%.\n\n---\n\n### Alternative explanations\n- Connection pool exhaustion or network timeouts between `orderflow` and `postgresql`, rather than an outright database engine failure.\n- A bad release, bad migration, or application-level query issue specifically in `/api/orders` that triggers database errors while the database server itself remains functional.\n\n---\n\n### Recommended next checks\n1. **Query Loki error logs:** Inspect the specific error messages and stack traces associated with the 40 error logs around `2026-10-16T18:06:37` to identify the exact database failure (e.g., auth failure, timeout, connection refused, or query error).\n2. **Inspect connection pool metrics:** Check `orderflow` connection pool utilization, wait times, and pool exhaustion metrics for PostgreSQL.\n3. **Verify PostgreSQL server metrics:** Review PostgreSQL CPU/memory utilization, connection limits, and active locks/transactions via database monitoring.\n4. **Cross-service verification:** Check if other services depending on the same PostgreSQL instance are also reporting degraded status.\n\n---\n\n### Remaining uncertainty\n- The specific error messages/codes returned by PostgreSQL are not included in the evidence.\n- It is unknown whether PostgreSQL itself is down or if the issue is restricted to network/pool access from `orderflow`.\n- Total throughput and behavior of endpoints other than `/api/orders` are not specified.",
+    "matched_on": [
+      "orderflow incident"
+    ],
+    "steps": [
+      "Review the AI-generated diagnosis against the collected logs and metrics.",
+      "Validate the suggested remediation before applying it.",
+      "Re-run the investigation to confirm whether the issue is resolved."
+    ],
+    "error_signature": "orderflow incident",
+    "source": "AI-generated",
+    "verified": false
+  }
+]

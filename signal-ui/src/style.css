@@ -218,3 +218,32 @@ tbody tr:last-child td { border-bottom: 0; }
     grid-template-columns: 1fr;
   }
 }
+.ai-markdown {
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.ai-markdown h2,
+.ai-markdown h3 {
+  margin: 1.25rem 0 0.5rem;
+  color: #f1f5f9;
+}
+
+.ai-markdown p {
+  margin: 0.5rem 0;
+}
+
+.ai-markdown ul,
+.ai-markdown ol {
+  padding-left: 1.5rem;
+}
+
+.ai-markdown li {
+  margin: 0.35rem 0;
+}
+
+.ai-markdown hr {
+  border: 0;
+  border-top: 1px solid #29354a;
+  margin: 1rem 0;
+}
