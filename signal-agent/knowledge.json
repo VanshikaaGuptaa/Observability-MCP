@@ -10,8 +10,8 @@
       "Validate the suggested remediation before applying it.",
       "Re-run the investigation to confirm whether the issue is resolved."
     ],
-    "error_signature": "service=orderflow|dependency=postgresql|failure=unknown|endpoint=/api/orders",
+    "error_signature": "service=orderflow|dependency=postgresql|failure=degraded|endpoint=/api/orders",
     "source": "AI-generated",
-    "verified": false
+    "verified": true
   }
 ]

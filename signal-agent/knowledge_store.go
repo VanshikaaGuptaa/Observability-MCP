@@ -284,18 +284,26 @@ func BuildLearnedKnowledge(
 		"failure_type", "event_type", "type")
 
 	if failureType == "" {
-		failureType = findErrorText(decoded)
-	}
+    failureType = findErrorText(decoded)
+}
 
-	if dependency == "" {
-		dependency = "unknown"
-	}
-	if endpoint == "" {
-		endpoint = "unknown"
-	}
-	if failureType == "" {
-		failureType = "unknown"
-	}
+if dependency == "" {
+    dependency = "unknown"
+}
+if endpoint == "" {
+    endpoint = "unknown"
+}
+if failureType == "" {
+    // Record the observed incident state rather than using "unknown"
+    // when the evidence confirms a degraded dependency.
+    status := evidenceStatus(evidence)
+
+    if status == "degraded" {
+        failureType = "degraded"
+    } else {
+        failureType = "unknown"
+    }
+}
 
 	signature := BuildErrorSignature(
 		service,
