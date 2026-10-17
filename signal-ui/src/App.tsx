@@ -440,6 +440,7 @@ async function investigate() {
               </p>
             </div>
             <span className="knowledge-count">{articles.length} ARTICLES</span>
+            
           </div>
 
           {articles.length === 0 ? (
@@ -463,9 +464,20 @@ async function investigate() {
                     >
                       {article.verified ? "Verified" : "Unverified"}
                     </span>
+                    <span className={`origin-badge ${article.match_origin ?? "unknown"}`}>
+  {{
+    runbook: "Predefined runbook",
+    learned: "Newly learned",
+    saved: "Reused from knowledge.json",
+  }[article.match_origin ?? "unknown"] ?? "Origin unknown"}
+</span>
                   </div>
                   <h3>{article.title}</h3>
-                  <p>{article.summary}</p>
+                  <div className="knowledge-summary markdown-content">
+  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+    {article.summary}
+  </ReactMarkdown>
+</div>
 
                   {article.matched_on?.length > 0 && (
                     <div className="match-list">

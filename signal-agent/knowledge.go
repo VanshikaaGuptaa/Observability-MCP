@@ -1,46 +1,39 @@
-
 package main
 
 import (
-    "encoding/json"
-    "strings"
+	"encoding/json"
+	"strings"
 )
 
 func mustJSON(value any) []byte {
-    data, err := json.Marshal(value)
-    if err != nil {
-        return []byte{}
-    }
-    return data
+	data, err := json.Marshal(value)
+	if err != nil {
+		return []byte{}
+	}
+	return data
 }
 
 type KnowledgeArticle struct {
-	Title     string   `json:"title"`
-	Summary   string   `json:"summary"`
-	MatchedOn []string `json:"matched_on"`
-	Steps     []string `json:"steps"`
-	
-ErrorSignature string `json:"error_signature,omitempty"`
-Source         string `json:"source,omitempty"`
-Verified       bool   `json:"verified"`
-
+	Title          string   `json:"title"`
+	Summary        string   `json:"summary"`
+	MatchedOn      []string `json:"matched_on"`
+	Steps          []string `json:"steps"`
+	ErrorSignature string   `json:"error_signature,omitempty"`
+	Source         string   `json:"source,omitempty"`
+	Verified       bool     `json:"verified"`
+	MatchOrigin    string   `json:"match_origin,omitempty"`
 }
 
 type runbook struct {
-	title    string
-	summary  string
-	keywords []string
-	steps    []string
+	title   string
+	summary string
+	steps   []string
 }
 
 var runbooks = []runbook{
 	{
 		title:   "PostgreSQL Connection Failure",
 		summary: "Troubleshoot database connectivity and order creation failures.",
-		keywords: []string{
-			"postgresql", "postgres", "database",
-			"connection refused", "database failure",
-		},
 		steps: []string{
 			"Check whether PostgreSQL is running and reachable.",
 			"Inspect database connection settings and connection-pool errors.",
@@ -51,9 +44,6 @@ var runbooks = []runbook{
 	{
 		title:   "Redis Connectivity and Cache Failures",
 		summary: "Investigate Redis connection errors and cache degradation.",
-		keywords: []string{
-			"redis", "cache failure", "redis_failure",
-		},
 		steps: []string{
 			"Check Redis availability and connectivity.",
 			"Inspect Redis errors in Orderflow logs.",
@@ -63,9 +53,6 @@ var runbooks = []runbook{
 	{
 		title:   "Payment Processing Failures",
 		summary: "Investigate failed payment requests and payment dependency errors.",
-		keywords: []string{
-			"payment", "payment_failure", "/api/payment",
-		},
 		steps: []string{
 			"Inspect payment endpoint errors and recent logs.",
 			"Check payment dependency availability and configuration.",
@@ -75,9 +62,6 @@ var runbooks = []runbook{
 	{
 		title:   "HTTP 5xx Error Spike",
 		summary: "Find the endpoints responsible for server errors.",
-		keywords: []string{
-			"error_rate", "error logs", "http 500", "5xx",
-		},
 		steps: []string{
 			"Identify endpoints with elevated 5xx error rates.",
 			"Correlate failures with logs and dependency errors.",
@@ -87,10 +71,6 @@ var runbooks = []runbook{
 	{
 		title:   "High Latency and Slow Requests",
 		summary: "Investigate slow endpoints and increased request latency.",
-		keywords: []string{
-			"p95_latency", "p99_latency", "high latency",
-			"slow", "latency spike",
-		},
 		steps: []string{
 			"Identify endpoints with elevated P95 or P99 latency.",
 			"Inspect logs and dependencies for slow operations.",
@@ -99,8 +79,7 @@ var runbooks = []runbook{
 	},
 }
 
-// FindKnowledge matches runbooks against the serialized investigation evidence.
-
+// FindKnowledge returns all static runbooks relevant to the evidence.
 func FindKnowledge(evidence any) []KnowledgeArticle {
 	rawBytes := mustJSON(evidence)
 	raw := strings.ToLower(string(rawBytes))
@@ -110,78 +89,104 @@ func FindKnowledge(evidence any) []KnowledgeArticle {
 
 	var matches []KnowledgeArticle
 
-	add := func(book runbook, matchedOn ...string) {
+	add := func(book runbook, reason string) {
 		matches = append(matches, KnowledgeArticle{
-			Title:     book.title,
-			Summary:   book.summary,
-			MatchedOn: matchedOn,
-			Steps:     book.steps,
+			Title:       book.title,
+			Summary:     book.summary,
+			MatchedOn:   []string{reason},
+			Steps:       book.steps,
+			Source:      "static",
+			Verified:    true,
+			MatchOrigin: "static",
 		})
 	}
 
-	// PostgreSQL: require actual connection failure evidence.
-	// PostgreSQL: match explicit database connection failures.
-if strings.Contains(raw, "connection refused") ||
-    strings.Contains(raw, "database connection failed") ||
-    strings.Contains(raw, "postgresql connection failed") ||
-    strings.Contains(raw, "postgres connection failed") {
-    add(runbooks[0], "PostgreSQL connection failure detected")
-}
-
-	// Redis: require specific Redis failure evidence.
-	// Redis: match explicit dependency degradation or Redis failures.
-if strings.Contains(raw, "redis_failure") ||
-    strings.Contains(raw, "redis connection refused") ||
-    strings.Contains(raw, "redis connectivity failed") ||
-    strings.Contains(raw, `"current_status":"degraded"`) &&
-        strings.Contains(raw, "redis") ||
-    strings.Contains(raw, `"window_status":"degraded"`) &&
-        strings.Contains(raw, "redis") {
-    add(runbooks[1], "Redis dependency degraded or failure detected")
-}
-
-	// Payments: require payment-specific failure evidence.
-	if strings.Contains(raw, "payment_failure") ||
-		strings.Contains(raw, "payment processing failed") ||
-		strings.Contains(raw, "/api/payment") && strings.Contains(raw, "degraded") {
-		add(runbooks[2], "payment failure evidence")
+	// Match dependency-specific failures independently.
+	if containsAny(raw,
+		"connection refused",
+		"database connection failed",
+		"postgresql connection failed",
+		"postgres connection failed",
+		"database operation failed",
+		"postgresql dependency degraded",
+		"postgres dependency degraded",
+		"dependency=postgresql",
+		"dependency=postgres",
+	) {
+		add(runbooks[0], "PostgreSQL/database failure evidence")
 	}
 
-	// HTTP 5xx: require evidence of server errors or a significant error rate.
+	if containsAny(raw,
+		"redis_failure",
+		"redis connection refused",
+		"redis connectivity failed",
+		"redis dependency degraded",
+		"dependency=redis",
+	) {
+		add(runbooks[1], "Redis failure or dependency degradation")
+	}
+
+	if containsAny(raw,
+		"payment_failure",
+		"payment processing failed",
+		"payment dependency degraded",
+		"/api/payment",
+	) {
+		add(runbooks[2], "Payment failure evidence")
+	}
+
 	errorRate, hasErrorRate := findNumber(data, "error_rate")
-	hasHTTP500 := strings.Contains(raw, "http 500") ||
-		strings.Contains(raw, `"status":500`) ||
-		strings.Contains(raw, `"status": 500`)
+	hasHTTP500 := containsAny(raw,
+		"http 500",
+		`"status":500`,
+		`"status": 500`,
+		`"status_code":500`,
+		`"status_code": 500`,
+	)
 
 	if (hasErrorRate && errorRate > 0.05) || hasHTTP500 {
-		add(runbooks[3], "elevated error rate or HTTP 500")
+		add(runbooks[3], "Elevated HTTP error rate or HTTP 500")
 	}
 
-	// Latency: only recommend this runbook when latency is actually high.
 	p95, hasP95 := findNumber(data, "p95_latency")
 	p99, hasP99 := findNumber(data, "p99_latency")
 
+	// These thresholds assume latency is reported in seconds.
 	if (hasP95 && p95 > 0.5) || (hasP99 && p99 > 1.0) {
-		add(runbooks[4], "high P95/P99 latency")
+		add(runbooks[4], "High P95/P99 latency")
 	}
 
 	return matches
 }
 
-// findNumber searches nested JSON objects for a numeric field.
+func containsAny(text string, phrases ...string) bool {
+	for _, phrase := range phrases {
+		if strings.Contains(text, strings.ToLower(phrase)) {
+			return true
+		}
+	}
+	return false
+}
+
+// findNumber recursively searches nested evidence for a numeric field.
 func findNumber(value any, targetKey string) (float64, bool) {
 	switch item := value.(type) {
 	case map[string]any:
 		for key, val := range item {
 			if strings.EqualFold(key, targetKey) {
-				if number, ok := val.(float64); ok {
+				switch number := val.(type) {
+				case float64:
 					return number, true
+				case int:
+					return float64(number), true
 				}
 			}
+
 			if number, ok := findNumber(val, targetKey); ok {
 				return number, true
 			}
 		}
+
 	case []any:
 		for _, val := range item {
 			if number, ok := findNumber(val, targetKey); ok {

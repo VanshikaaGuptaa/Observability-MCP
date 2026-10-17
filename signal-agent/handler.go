@@ -4,9 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"time"
-	"fmt"
 	"strings"
+	"time"
 )
 
 type InvestigationRequest struct {
@@ -15,42 +14,43 @@ type InvestigationRequest struct {
 }
 
 type InvestigationResponse struct {
-	Service       string `json:"service"`
-	Duration      string `json:"duration"`
-	Evidence      any    `json:"evidence"`
-	AIExplanation string `json:"ai_explanation"`
-	DurationMS    int64  `json:"duration_ms"`
-	Knowledge []KnowledgeArticle `json:"knowledge"`
+	Service       string             `json:"service"`
+	Duration      string             `json:"duration"`
+	Evidence      any                `json:"evidence"`
+	AIExplanation string             `json:"ai_explanation"`
+	DurationMS    int64              `json:"duration_ms"`
+	Knowledge     []KnowledgeArticle `json:"knowledge"`
 }
 
 type API struct {
 	mcp    *MCPClient
 	gemini *GeminiAnalyzer
 }
+
 func evidenceStatus(evidence any) string {
-    raw, err := json.Marshal(evidence)
-    if err != nil {
-        return ""
-    }
+	raw, err := json.Marshal(evidence)
+	if err != nil {
+		return ""
+	}
 
-    var result map[string]any
-    if err := json.Unmarshal(raw, &result); err != nil {
-        return ""
-    }
+	var result map[string]any
+	if json.Unmarshal(raw, &result) != nil {
+		return ""
+	}
 
-    if status, ok := result["status"].(string); ok {
-        return status
-    }
+	if status, ok := result["status"].(string); ok {
+		return strings.ToLower(strings.TrimSpace(status))
+	}
 
-    // Your MCP response may wrap the incident under "evidence".
-    if nested, ok := result["evidence"].(map[string]any); ok {
-        if status, ok := nested["status"].(string); ok {
-            return status
-        }
-    }
+	if nested, ok := result["evidence"].(map[string]any); ok {
+		if status, ok := nested["status"].(string); ok {
+			return strings.ToLower(strings.TrimSpace(status))
+		}
+	}
 
-    return ""
+	return ""
 }
+
 func (a *API) Health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
@@ -76,7 +76,6 @@ func (a *API) Investigate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Phase 1 supports the existing Orderflow service only.
 	if req.Service == "" {
 		req.Service = "orderflow"
 	}
@@ -88,16 +87,15 @@ func (a *API) Investigate(w http.ResponseWriter, r *http.Request) {
 	if req.Duration == "" {
 		req.Duration = "10m"
 	}
-	if req.Duration != "5m" &&
-		req.Duration != "10m" &&
-		req.Duration != "15m" &&
-		req.Duration != "1h" {
+
+	switch req.Duration {
+	case "5m", "10m", "15m", "1h":
+	default:
 		http.Error(w, "unsupported duration", http.StatusBadRequest)
 		return
 	}
 
 	start := time.Now()
-
 	ctx := r.Context()
 
 	evidence, err := a.mcp.InvestigateIncident(
@@ -106,53 +104,73 @@ func (a *API) Investigate(w http.ResponseWriter, r *http.Request) {
 		req.Duration,
 	)
 	if err != nil {
+		log.Printf("MCP investigation failed: %v", err)
 		http.Error(w, "MCP investigation failed", http.StatusBadGateway)
 		return
 	}
 
-	
-explanation, err := a.gemini.Analyze(
-	ctx, req.Service, req.Duration, evidence,
-)
-aiSucceeded := err == nil
+	explanation, err := a.gemini.Analyze(
+		ctx,
+		req.Service,
+		req.Duration,
+		evidence,
+	)
+	aiSucceeded := err == nil
 
-if err != nil {
-	log.Printf("Gemini analysis failed: %v", err)
-	explanation = "AI explanation unavailable. Review the collected metrics and logs below for incident evidence."
-}
+	if err != nil {
+		log.Printf("Gemini analysis failed: %v", err)
+		explanation = "AI explanation unavailable. Review the collected metrics and logs below for incident evidence."
+	}
 
-known := FindKnowledge(evidence)
-saved := FindSavedKnowledge(evidence)
+	// Always gather all applicable knowledge sources.
+	known := FindKnowledge(evidence)
+	saved := FindSavedKnowledge(evidence)
 
-knowledge := append(known, saved...)
+	knowledge := make([]KnowledgeArticle, 0, len(known)+len(saved)+1)
 
-// Learn only when no existing article matches and AI analysis succeeded.
-status := strings.ToLower(
-    fmt.Sprint(evidenceStatus(evidence)),
-)
+	for _, article := range known {
+		article.MatchOrigin = "static"
+		appendUniqueKnowledge(&knowledge, article)
+	}
 
-specificMatch := hasSpecificRunbook(known)
+	for _, article := range saved {
+		article.MatchOrigin = "saved"
+		appendUniqueKnowledge(&knowledge, article)
+	}
 
-if !specificMatch &&
-    len(saved) == 0 &&
-    aiSucceeded &&
-    status != "healthy" &&
-    status != "normal" {
+	status := evidenceStatus(evidence)
+	incidentUnhealthy := status != "" &&
+		status != "healthy" &&
+		status != "normal"
 
-    article := BuildLearnedKnowledge(
-        req.Service,
-        evidence,
-        explanation,
-    )
+	// Learn only if AI succeeded, evidence indicates an incident, and
+	// no equivalent saved article already matched. Static generic
+	// runbooks do not block learning.
+	if incidentUnhealthy && aiSucceeded && len(saved) == 0 {
+		article := BuildLearnedKnowledge(
+			req.Service,
+			evidence,
+			explanation,
+		)
 
-    if err := SaveKnowledgeArticle(article); err != nil {
-        log.Printf("Failed to save knowledge article: %v", err)
-    } else {
-        knowledge = append(knowledge, article)
-        log.Printf("Saved new knowledge article: %s", article.Title)
-    }
-}
+		inserted, saveErr := SaveKnowledgeArticle(article)
+		if saveErr != nil {
+			log.Printf("Failed to save learned article: %v", saveErr)
+		} else if inserted {
+			article.MatchOrigin = "learned"
+			appendUniqueKnowledge(&knowledge, article)
+			log.Printf("Learned and saved new article: %s", article.Title)
+		} else {
+			// It already exists. Fetch the stored copy and label it saved.
+			log.Printf("Matching saved article already exists: %s", article.Title)
 
+			refreshed := FindSavedKnowledge(evidence)
+			for _, savedArticle := range refreshed {
+				savedArticle.MatchOrigin = "saved"
+				appendUniqueKnowledge(&knowledge, savedArticle)
+			}
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(InvestigationResponse{
@@ -161,17 +179,38 @@ if !specificMatch &&
 		Evidence:      evidence,
 		AIExplanation: explanation,
 		DurationMS:    time.Since(start).Milliseconds(),
-		Knowledge: knowledge,
+		Knowledge:     knowledge,
 	})
 }
-func hasSpecificRunbook(articles []KnowledgeArticle) bool {
-    for _, article := range articles {
-        switch article.Title {
-        case "PostgreSQL Connection Failure",
-            "Redis Connectivity and Cache Failures",
-            "Payment Processing Failures":
-            return true
-        }
-    }
-    return false
+
+func appendUniqueKnowledge(
+	articles *[]KnowledgeArticle,
+	candidate KnowledgeArticle,
+) {
+	for i, existing := range *articles {
+		if candidate.ErrorSignature != "" &&
+			strings.EqualFold(
+				strings.TrimSpace(existing.ErrorSignature),
+				strings.TrimSpace(candidate.ErrorSignature),
+			) {
+			// Preserve the origin of the more useful existing result.
+			// Static and saved copies of the same article should not duplicate.
+			return
+		}
+
+		if strings.EqualFold(
+			strings.TrimSpace(existing.Title),
+			strings.TrimSpace(candidate.Title),
+		) {
+			// Prefer the saved/learned version if the title collides
+			// with a generic static runbook.
+			if candidate.MatchOrigin == "saved" ||
+				candidate.MatchOrigin == "learned" {
+				(*articles)[i] = candidate
+			}
+			return
+		}
+	}
+
+	*articles = append(*articles, candidate)
 }

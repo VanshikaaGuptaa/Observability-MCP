@@ -31,6 +31,7 @@ export interface KnowledgeArticle {
   error_signature?: string;
   source?: string;
   verified?: boolean;
+  match_origin?: "runbook" | "learned" | "saved";
 }
 
 export interface InvestigationResponse {
