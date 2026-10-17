@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -24,11 +26,29 @@ type InvestigationResponse struct {
 	AISkipped         bool               `json:"ai_skipped"`
 	MatchScore        float64            `json:"match_score"`
 	DecisionReason    string             `json:"decision_reason"`
+	// AIError is a sanitized, user-safe reason when AI analysis was
+	// required but unavailable (e.g. no key configured). Never secret.
+	AIError string `json:"ai_error,omitempty"`
+}
+
+// evidenceCollector gathers live observability evidence (MCP).
+type evidenceCollector interface {
+	InvestigateIncident(ctx context.Context, service, duration string) (any, error)
+}
+
+// incidentAnalyzer produces an AI explanation (Gemini).
+type incidentAnalyzer interface {
+	Analyze(ctx context.Context, service, duration string, evidence any) (string, error)
 }
 
 type API struct {
-	mcp    *MCPClient
-	gemini *GeminiAnalyzer
+	mcp    evidenceCollector
+	gemini incidentAnalyzer
+
+	// Runtime Gemini key configuration (Settings UI).
+	settings            geminiSettings
+	tester              connectionTester
+	allowRemoteSettings bool
 }
 
 func evidenceStatus(evidence any) string {
@@ -205,6 +225,7 @@ func (a *API) Investigate(w http.ResponseWriter, r *http.Request) {
 
 	explanation := ""
 	aiSucceeded := false
+	aiError := ""
 
 	// Step 4: Either use a deterministic runbook-based explanation
 	// or ask Gemini to analyze the collected evidence.
@@ -234,8 +255,23 @@ func (a *API) Investigate(w http.ResponseWriter, r *http.Request) {
 		aiSucceeded = err == nil
 
 		if err != nil {
-			log.Printf("Gemini analysis failed: %v", err)
+			var safe *GeminiError
+			switch {
+			case errors.Is(err, ErrGeminiNotConfigured):
+				aiError = ErrGeminiNotConfigured.Error()
+				log.Printf("Gemini analysis skipped: no API key configured")
+			case errors.As(err, &safe):
+				aiError = safe.Message
+				log.Printf("Gemini analysis failed: %s", safe.Message)
+			default:
+				aiError = "AI analysis failed."
+				log.Printf("Gemini analysis failed: %v", err)
+			}
 			explanation = "AI explanation unavailable. Review the collected metrics and logs below for incident evidence."
+			if errors.Is(err, ErrGeminiNotConfigured) {
+				explanation = "AI explanation unavailable: " + aiError +
+					"\n\nThe live evidence and knowledge matches below were still collected."
+			}
 		}
 
 		log.Printf(
@@ -305,6 +341,7 @@ func (a *API) Investigate(w http.ResponseWriter, r *http.Request) {
 		AISkipped:         decision.SkipAI,
 		MatchScore:        decision.MatchScore,
 		DecisionReason:    decision.DecisionReason,
+		AIError:           aiError,
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {

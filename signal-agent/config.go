@@ -53,9 +53,9 @@ func loadConfig() (Config, error) {
 		AgentPort:     os.Getenv("AGENT_PORT"),
 	}
 
-	if cfg.GeminiAPIKey == "" {
-		return cfg, fmt.Errorf("GEMINI_API_KEY is required")
-	}
+	// GEMINI_API_KEY is optional. When set it acts as the fallback key;
+	// users can also supply a key at runtime through the Settings UI.
+	cfg.GeminiAPIKey = strings.TrimSpace(cfg.GeminiAPIKey)
 	if cfg.GeminiModel == "" {
 		return cfg, fmt.Errorf("GEMINI_MODEL is required")
 	}

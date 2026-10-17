@@ -1,13 +1,22 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   FailureScenario,
+  GeminiKeyStatus,
   InvestigationResponse,
   KnowledgeArticle,
 } from "./types";
 import "./style.css";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { SettingsPanel } from "./SettingsPanel";
+
+const originLabels: Record<string, string> = {
+  runbook: "Predefined runbook",
+  static: "Predefined runbook",
+  learned: "Newly learned",
+  saved: "Reused from knowledge.json",
+};
 
 const scenarios: { value: FailureScenario; label: string }[] = [
   { value: "normal", label: "Normal" },
@@ -61,6 +70,23 @@ function App() {
   const [notice, setNotice] = useState("");
   const [service, setService] = useState("orderflow");
 const [duration, setDuration] = useState("10m");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [geminiStatus, setGeminiStatus] =
+    useState<GeminiKeyStatus | null>(null);
+
+  // Load the non-secret Gemini configuration status for the topbar chip.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/settings/gemini", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: GeminiKeyStatus | null) => {
+        if (!cancelled && data) setGeminiStatus(data);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
 
 
@@ -159,6 +185,14 @@ async function investigate() {
         <a className="nav-item" href="#knowledge">
           <span>▤</span> Knowledge Hub
         </a>
+        <button
+          type="button"
+          id="nav-settings"
+          className={`nav-item nav-button ${settingsOpen ? "active" : ""}`}
+          onClick={() => setSettingsOpen(true)}
+        >
+          <span>⚙</span> Settings
+        </button>
 
         <div className="sidebar-bottom">
           <div className="connection-dot" />
@@ -179,8 +213,30 @@ async function investigate() {
               incident knowledge.
             </p>
           </div>
-          <div className="environment-pill">
-            <span className="connection-dot" /> LOCAL DEMO
+          <div className="topbar-actions">
+            <button
+              type="button"
+              id="topbar-gemini-status"
+              className={`gemini-chip ${
+                geminiStatus === null
+                  ? "unknown"
+                  : geminiStatus.configured
+                    ? "on"
+                    : "off"
+              }`}
+              onClick={() => setSettingsOpen(true)}
+              title="Configure Gemini API key"
+            >
+              <span className="chip-dot" />
+              {geminiStatus === null
+                ? "GEMINI · SETTINGS"
+                : geminiStatus.configured
+                  ? `GEMINI · ${geminiStatus.source === "user" ? "YOUR KEY" : "ENV KEY"}`
+                  : "GEMINI · NOT CONFIGURED"}
+            </button>
+            <div className="environment-pill">
+              <span className="connection-dot" /> LOCAL DEMO
+            </div>
           </div>
         </header>
 
@@ -315,6 +371,19 @@ async function investigate() {
 
             {result ? (
               <>
+                {result.ai_error && !result.ai_skipped && (
+                  <div className="ai-config-warning" role="alert">
+                    <span>{result.ai_error}</span>
+                    <button
+                      type="button"
+                      id="open-settings-from-summary"
+                      className="link-button"
+                      onClick={() => setSettingsOpen(true)}
+                    >
+                      Open Settings
+                    </button>
+                  </div>
+                )}
                 <div className="ai-markdown">
   <ReactMarkdown remarkPlugins={[remarkGfm]}>
     {result.ai_explanation}
@@ -465,11 +534,7 @@ async function investigate() {
                       {article.verified ? "Verified" : "Unverified"}
                     </span>
                     <span className={`origin-badge ${article.match_origin ?? "unknown"}`}>
-  {{
-    runbook: "Predefined runbook",
-    learned: "Newly learned",
-    saved: "Reused from knowledge.json",
-  }[article.match_origin ?? "unknown"] ?? "Origin unknown"}
+  {originLabels[article.match_origin ?? ""] ?? "Origin unknown"}
 </span>
                   </div>
                   <h3>{article.title}</h3>
@@ -516,6 +581,12 @@ async function investigate() {
           </span>
         </footer>
       </main>
+
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onStatusChange={setGeminiStatus}
+      />
     </div>
   );
 }

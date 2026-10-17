@@ -31,7 +31,7 @@ export interface KnowledgeArticle {
   error_signature?: string;
   source?: string;
   verified?: boolean;
-  match_origin?: "runbook" | "learned" | "saved";
+  match_origin?: "runbook" | "learned" | "saved" | "static";
 }
 
 export interface InvestigationResponse {
@@ -41,6 +41,25 @@ export interface InvestigationResponse {
   ai_explanation: string;
   duration_ms: number;
   knowledge: KnowledgeArticle[] | null;
+  investigation_mode?: string;
+  ai_skipped?: boolean;
+  match_score?: number;
+  decision_reason?: string;
+  ai_error?: string;
+}
+
+export type GeminiKeySource = "user" | "environment" | "none";
+
+export interface GeminiKeyStatus {
+  configured: boolean;
+  source: GeminiKeySource;
+  env_fallback_available: boolean;
+  user_key_configured: boolean;
+}
+
+export interface GeminiTestResponse extends GeminiKeyStatus {
+  ok: boolean;
+  message: string;
 }
 
 export type FailureScenario =

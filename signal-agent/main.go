@@ -27,19 +27,27 @@ func main() {
 	}
 	defer mcpClient.Close()
 
-	gemini, err := NewGeminiAnalyzer(cfg)
-	if err != nil {
-		log.Fatalf("Gemini startup failed: %v", err)
+	geminiKeys := NewGeminiKeyStore(cfg.GeminiAPIKey)
+	if !geminiKeys.Status().Configured {
+		log.Printf("GEMINI_API_KEY not set; configure a key in Settings to enable AI analysis")
 	}
+	gemini := NewGeminiAnalyzer(cfg, geminiKeys)
 
 	api := &API{
-		mcp:    mcpClient,
-		gemini: gemini,
+		mcp:      mcpClient,
+		gemini:   gemini,
+		settings: geminiKeys,
+		tester:   gemini,
+		// Opt-in only. Settings are unauthenticated, so by default they
+		// accept requests from the local machine only.
+		allowRemoteSettings: os.Getenv("SETTINGS_ALLOW_REMOTE") == "true",
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", api.Health)
 	mux.HandleFunc("/api/investigations", api.Investigate)
+	mux.HandleFunc("/api/settings/gemini", api.GeminiSettings)
+	mux.HandleFunc("/api/settings/gemini/test", api.TestGeminiSettings)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.AgentPort,
