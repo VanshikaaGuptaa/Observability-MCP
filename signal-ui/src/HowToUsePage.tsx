@@ -98,25 +98,6 @@ export function HowToUsePage({
   const [selectedScenario, setSelectedScenario] = useState<FailureScenario>("redis_failure");
   const [activeTab, setActiveTab] = useState<"walkthrough" | "troubleshooting">("walkthrough");
 
-  const steps = [
-    { num: 1, title: "Configure Gemini API", short: "1. Gemini Setup" },
-    { num: 2, title: "Activate Failure Scenario", short: "2. Activate Scenario" },
-    { num: 3, title: "Generate Traffic (Bash)", short: "3. Generate Traffic" },
-    { num: 4, title: "Run AI Investigation", short: "4. Run Investigation" },
-    { num: 5, title: "Verify Knowledge Learning", short: "5. Auto-Learning" },
-    { num: 6, title: "Investigate Again (Unverified)", short: "6. Unverified Check" },
-    { num: 7, title: "Verify in Knowledge Hub", short: "7. Verify Article" },
-    { num: 8, title: "Exact Match & Instant Report", short: "8. 100% Match" },
-    { num: 9, title: "Reset Scenario & Recovery", short: "9. Reset & Recovery" },
-  ];
-
-  const scrollToStep = (stepNum: number) => {
-    const el = document.getElementById(`guide-step-${stepNum}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
-
   return (
     <div className="how-to-use-page">
       {/* Header Card */}
