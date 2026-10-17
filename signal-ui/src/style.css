@@ -897,7 +897,7 @@ tbody tr:last-child td { border-bottom: 0; }
   box-shadow: 0 2px 10px #7c3aed1a;
 }
 
-/* Stepper Bar */
+/* Stepper Bar & Quick Jump */
 .guide-stepper-bar {
   background: #0d1422;
   border: 1px solid var(--border);
@@ -906,21 +906,31 @@ tbody tr:last-child td { border-bottom: 0; }
   margin-bottom: 24px;
 }
 
+.guide-quick-jump-sticky {
+  position: sticky;
+  top: 16px;
+  z-index: 30;
+  backdrop-filter: blur(16px);
+  background: rgba(13, 20, 34, 0.92);
+  border-color: #334155;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+
 .guide-stepper-label {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .guide-stepper-label span {
   font: 10px "DM Mono", monospace;
   letter-spacing: 1.2px;
-  color: #8b5cf6;
+  color: #a78bfa;
 }
 
 .guide-stepper-label strong {
-  font: 600 15px "Space Grotesk", sans-serif;
+  font: 600 14px "Space Grotesk", sans-serif;
   color: #f1f5f9;
 }
 
@@ -937,31 +947,22 @@ tbody tr:last-child td { border-bottom: 0; }
   gap: 8px;
   background: #111827;
   border: 1px solid #222e42;
-  border-radius: 7px;
-  padding: 7px 12px;
-  color: #8191aa;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #94a3b8;
   font-size: 11px;
   white-space: nowrap;
+  cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .guide-step-pill:hover {
   background: #172238;
-  color: #cbd5e1;
+  color: #f1f5f9;
+  border-color: #3b4d6e;
 }
 
-.guide-step-pill.active {
-  background: #8b5cf628;
-  color: #ddd6fe;
-  border-color: #a78bfa;
-}
-
-.guide-step-pill.completed {
-  border-color: #10b98155;
-  color: #a7f3d0;
-}
-
-.step-circle {
+.guide-step-pill .step-num {
   display: grid;
   place-items: center;
   width: 18px;
@@ -969,25 +970,39 @@ tbody tr:last-child td { border-bottom: 0; }
   border-radius: 50%;
   background: #1e293b;
   font: 600 10px "DM Mono", monospace;
+  color: #cbd5e1;
 }
 
-.guide-step-pill.active .step-circle {
+.guide-step-pill:hover .step-num {
   background: #8b5cf6;
   color: white;
 }
 
-.guide-step-pill.completed .step-circle {
-  background: #059669;
-  color: white;
+/* Continuous Container for All 9 Steps */
+.guide-all-steps-container {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
 }
 
-/* Step Section */
+/* Step Section Card */
 .guide-step-section {
-  animation: fadeIn 0.2s ease-out;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  scroll-margin-top: 110px;
+  transition: border-color 0.2s ease;
+}
+
+.guide-step-section:hover {
+  border-color: #3b4d6e;
 }
 
 .guide-step-header {
   margin-bottom: 20px;
+  border-bottom: 1px solid #1a2538;
+  padding-bottom: 16px;
 }
 
 .guide-step-badge {
@@ -1006,6 +1021,88 @@ tbody tr:last-child td { border-bottom: 0; }
   font: 700 22px "Space Grotesk", sans-serif;
   color: #f8fafc;
   margin: 6px 0 8px;
+}
+
+.guide-scenario-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.guide-scenario-item {
+  background: #090e1a;
+  border: 1px solid #1c283c;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.guide-scenario-item strong {
+  display: block;
+  font-size: 13px;
+  color: #f1f5f9;
+  margin-bottom: 3px;
+}
+
+.guide-scenario-item p {
+  font-size: 11px;
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.guide-scenario-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.guide-scenario-nav .guide-scenario-btn {
+  background: #090e1a;
+  border: 1px solid #222e42;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.guide-scenario-nav .guide-scenario-btn:hover {
+  background: #142036;
+  border-color: #3b4d6e;
+  color: #f8fafc;
+}
+
+.guide-scenario-nav .guide-scenario-btn.active {
+  background: #7c3aed26;
+  border-color: #8b5cf6;
+  color: #ddd6fe;
+  box-shadow: 0 0 12px #7c3aed22;
+}
+
+.guide-result-bullets {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.guide-result-bullets li {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+  background: #090e1a;
+  border: 1px solid #1c283c;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.guide-result-bullets li strong {
+  color: #f1f5f9;
 }
 
 /* Callout Info Cards */
@@ -1364,8 +1461,8 @@ tbody tr:last-child td { border-bottom: 0; }
   margin-top: 30px;
 }
 
-/* Checklist Styles */
-.guide-checklist-container, .guide-trouble-container {
+/* Troubleshooting Styles */
+.guide-trouble-container {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -1373,92 +1470,14 @@ tbody tr:last-child td { border-bottom: 0; }
   animation: fadeIn 0.25s ease-out;
 }
 
-.guide-checklist-header, .guide-trouble-header {
+.guide-trouble-header {
   margin-bottom: 24px;
 }
 
-.guide-checklist-header h2, .guide-trouble-header h2 {
+.guide-trouble-header h2 {
   font: 700 22px "Space Grotesk", sans-serif;
   color: #f8fafc;
   margin: 0 0 6px;
-}
-
-.guide-checklist-items {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 24px;
-}
-
-.guide-checklist-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  background: #0d1526;
-  border: 1px solid #212f45;
-  border-radius: 10px;
-  padding: 16px 20px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.guide-checklist-row:hover {
-  background: #131e36;
-  border-color: #354769;
-}
-
-.guide-checklist-row.checked {
-  background: #0e271e;
-  border-color: #10b98166;
-}
-
-.guide-checklist-row input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  accent-color: #10b981;
-  cursor: pointer;
-}
-
-.guide-check-content {
-  flex: 1;
-}
-
-.guide-check-content strong {
-  display: block;
-  font-size: 14px;
-  color: #f1f5f9;
-  margin-bottom: 4px;
-}
-
-.guide-check-content p {
-  font-size: 12px;
-  color: #94a3b8;
-  margin: 0;
-  line-height: 1.45;
-}
-
-.guide-check-status {
-  font: 11px "DM Mono", monospace;
-  background: #172238;
-  color: #94a3b8;
-  padding: 4px 10px;
-  border-radius: 6px;
-  white-space: nowrap;
-}
-
-.guide-checklist-row.checked .guide-check-status {
-  background: #064e3b;
-  color: #6ee7b7;
-}
-
-.guide-checklist-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-top: 1px solid #202d42;
-  padding-top: 18px;
-  font-size: 13px;
-  color: #cbd5e1;
 }
 
 /* Troubleshooting Grid */

@@ -95,14 +95,13 @@ export function HowToUsePage({
   onNavigateToOverview?: () => void;
   onNavigateToKnowledge?: () => void;
 }) {
-  const [activeStep, setActiveStep] = useState<number>(1);
   const [selectedScenario, setSelectedScenario] = useState<FailureScenario>("redis_failure");
   const [activeTab, setActiveTab] = useState<"walkthrough" | "troubleshooting">("walkthrough");
 
   const steps = [
     { num: 1, title: "Configure Gemini API", short: "1. Gemini Setup" },
     { num: 2, title: "Activate Failure Scenario", short: "2. Activate Scenario" },
-    { num: 3, title: "Generate Traffic", short: "3. Generate Traffic" },
+    { num: 3, title: "Generate Traffic (Bash)", short: "3. Generate Traffic" },
     { num: 4, title: "Run AI Investigation", short: "4. Run Investigation" },
     { num: 5, title: "Verify Knowledge Learning", short: "5. Auto-Learning" },
     { num: 6, title: "Investigate Again (Unverified)", short: "6. Unverified Check" },
@@ -111,16 +110,23 @@ export function HowToUsePage({
     { num: 9, title: "Reset Scenario & Recovery", short: "9. Reset & Recovery" },
   ];
 
+  const scrollToStep = (stepNum: number) => {
+    const el = document.getElementById(`guide-step-${stepNum}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
     <div className="how-to-use-page">
-      {/* Header */}
+      {/* Header Card */}
       <div className="guide-hero-card">
         <div className="guide-hero-content">
           <span className="eyebrow">PRACTICAL INTERACTIVE PLAYBOOK</span>
           <h1 className="guide-hero-title">How to Use SignalSleuth AI</h1>
           <p className="guide-hero-subtitle">
-            An end-to-end, zero-guesswork demonstration walkthrough with verified runnable Bash commands,
-            traffic generation loops, Gemini root cause investigations, and automated knowledge learning.
+            An end-to-end, single-page interactive guide. All steps are performed directly within the web dashboard,
+            with copyable Bash traffic loops provided in Step 3 to feed real-time incident telemetry into Prometheus and Loki.
           </p>
 
           <div className="guide-env-strip">
@@ -146,7 +152,7 @@ export function HowToUsePage({
             className={`guide-tab-btn ${activeTab === "walkthrough" ? "active" : ""}`}
             onClick={() => setActiveTab("walkthrough")}
           >
-            <span>📖</span> Step-by-Step Walkthrough
+            <span>📖</span> Interactive Playbook (All 9 Steps)
           </button>
           <button
             type="button"
@@ -158,332 +164,187 @@ export function HowToUsePage({
         </div>
       </div>
 
+      {/* WALKTHROUGH: ALL 9 STEPS ON ONE CONTINUOUS PAGE */}
       {activeTab === "walkthrough" && (
-        <div className="guide-walkthrough-layout">
-          {/* Step Stepper Navigation Bar */}
-          <div className="guide-stepper-bar">
-            <div className="guide-stepper-label">
-              <span>STEP {activeStep} OF {steps.length}</span>
-              <strong>{steps[activeStep - 1]?.title}</strong>
+        <div className="guide-all-steps-container">
+
+
+          {/* =========================================================================
+              STEP 1: CONFIGURE GEMINI API KEY
+             ========================================================================= */}
+          <div id="guide-step-1" className="guide-step-section">
+            <div className="guide-step-header">
+              <span className="guide-step-badge">STEP 1</span>
+              <h2>Configure Gemini API Key in the UI</h2>
+              <p className="muted">
+                Signal Agent uses Google Gemini to synthesize root cause diagnoses, impact assessments, and remediation plans when an incident is active.
+              </p>
             </div>
 
-            <div className="guide-step-pills">
-              {steps.map((s) => (
-                <button
-                  key={s.num}
-                  type="button"
-                  className={`guide-step-pill ${activeStep === s.num ? "active" : ""} ${s.num < activeStep ? "completed" : ""}`}
-                  onClick={() => setActiveStep(s.num)}
-                >
-                  <span className="step-circle">{s.num < activeStep ? "✓" : s.num}</span>
-                  <span className="step-text">{s.short}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* STEP 1 */}
-          {activeStep === 1 && (
-            <div className="guide-step-section">
-              <div className="guide-step-header">
-                <span className="guide-step-badge">STEP 1</span>
-                <h2>Configure Gemini API Key</h2>
-                <p className="muted">
-                  SignalSleuth AI uses Gemini 2.5 Flash to automatically analyze telemetry evidence (Loki logs, Prometheus metrics, and deployment history).
-                  You can configure your key via the secure Settings UI or via environment variable.
-                </p>
-              </div>
-
-              <div className="guide-info-card">
-                <div className="guide-info-icon">💡</div>
-                <div className="guide-info-body">
-                  <strong>Recommended: Use the Dashboard Settings Interface</strong>
-                  <p>
-                    Click the <strong>⚙ Settings</strong> button in the sidebar or top bar to open the configuration modal.
-                    Paste your Gemini API key, click <strong>Test Connection</strong> to verify, and click <strong>Save Key</strong>.
-                    The key is encrypted in memory, masked in the UI, and never exposed in browser or server logs.
-                  </p>
+            <div className="guide-card-content">
+              <div className="guide-action-box">
+                <div className="guide-action-col">
+                  <h4>Frontend Setup Steps:</h4>
+                  <ol>
+                    <li>Click the <strong>⚙ Settings</strong> button in the top-right navigation bar (or use the button below).</li>
+                    <li>Paste your Google Gemini API key into the <strong>Gemini API Key</strong> field.</li>
+                    <li>Click <strong>Test & Save Connection</strong> to validate the key directly against Google Gemini.</li>
+                    <li>Look for the green <strong>Connection Verified</strong> badge and confirmation message.</li>
+                  </ol>
                   <button
                     type="button"
                     className="button button-primary"
-                    style={{ marginTop: 8 }}
                     onClick={onOpenSettings}
                   >
-                    Open Settings Modal Now
+                    ⚙ Open Settings Modal Now
                   </button>
                 </div>
-              </div>
-
-              <CommandBlock
-                title="Verify Gemini Key Configuration Status via API"
-                environment="GCP VM Terminal (Signal Agent :8090)"
-                description="Check whether Gemini is configured on the backend without leaking secret keys."
-                command="curl -sS http://localhost:8090/api/settings/gemini"
-                expectedOutput={`{
-  "configured": true,
-  "source": "user",
-  "env_fallback_available": false,
-  "user_key_configured": true
-}`}
-                verificationTip="The 'configured' field will be true, and 'source' will report either 'user' or 'environment'."
-                troubleshootingTip="If 'configured' is false, open Settings in the UI or export GEMINI_API_KEY in .env and restart signal-agent."
-              />
-
-              <div className="guide-step-actions">
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => setActiveStep(2)}
-                >
-                  Continue to Step 2: Activate Failure Scenario →
-                </button>
+                <div className="guide-action-col">
+                  <div className="guide-info-card">
+                    <div className="guide-info-icon">🔑</div>
+                    <div className="guide-info-body">
+                      <strong>Current Gemini Status:</strong>
+                      <p>
+                        {geminiStatus?.configured ? (
+                          <span className="status-badge status-healthy">
+                            ✓ Configured via {geminiStatus.source === "user" ? "Frontend Settings" : "Environment Variable"}
+                          </span>
+                        ) : (
+                          <span className="status-badge status-degraded">
+                            ⚠ Not Configured — Open Settings to configure
+                          </span>
+                        )}
+                      </p>
+                      <p style={{ marginTop: "10px", fontSize: "12px", color: "var(--muted)" }}>
+                        Configured keys are saved securely in <code>gemini_settings.json</code> and persist across server restarts.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* STEP 2 */}
-          {activeStep === 2 && (
-            <div className="guide-step-section">
-              <div className="guide-step-header">
-                <span className="guide-step-badge">STEP 2</span>
-                <h2>Activate a Failure Scenario</h2>
-                <p className="muted">
-                  OrderFlow includes an in-memory fault injection simulator. Select a failure scenario below to inspect its mechanics and view the exact activation command.
-                </p>
-              </div>
+          {/* =========================================================================
+              STEP 2: ACTIVATE FAILURE SCENARIO
+             ========================================================================= */}
+          <div id="guide-step-2" className="guide-step-section">
+            <div className="guide-step-header">
+              <span className="guide-step-badge">STEP 2</span>
+              <h2>Activate a Failure Scenario in the UI</h2>
+              <p className="muted">
+                OrderFlow contains an in-memory fault injector. Select which failure scenario to activate using the dropdown selector on the Incident Overview dashboard.
+              </p>
+            </div>
 
-              {/* Scenario Selector Tabs */}
-              <div className="guide-scenario-tabs">
-                {[
-                  { id: "redis_failure" as FailureScenario, name: "Redis Failure (Cache)", badge: "Degradation" },
-                  { id: "db_failure" as FailureScenario, name: "Database Failure (Postgres)", badge: "Outage 500" },
-                  { id: "payment_failure" as FailureScenario, name: "Payment Failure", badge: "Gateway 502" },
-                  { id: "slow" as FailureScenario, name: "High Latency (Slow)", badge: "P99 Spike >2s" },
-                  { id: "error_spike" as FailureScenario, name: "HTTP Error Spike", badge: "Catalog 500" },
-                  { id: "normal" as FailureScenario, name: "Normal (Baseline)", badge: "Healthy" },
-                ].map((sc) => (
+            <div className="guide-card-content">
+              <div className="guide-action-box">
+                <div className="guide-action-col">
+                  <h4>How to Activate in the UI:</h4>
+                  <ol>
+                    <li>Go to the <strong>◈ Incident Overview</strong> page.</li>
+                    <li>Locate the <strong>Failure Scenario</strong> dropdown in the top bar.</li>
+                    <li>Select one of the 5 incident scenarios (e.g. <code>redis_failure</code>, <code>db_failure</code>, or <code>payment_failure</code>).</li>
+                    <li>The system immediately begins simulating the chosen failure condition in memory.</li>
+                  </ol>
                   <button
-                    key={sc.id}
                     type="button"
-                    className={`guide-scenario-btn ${selectedScenario === sc.id ? "active" : ""}`}
-                    onClick={() => setSelectedScenario(sc.id)}
+                    className="button button-primary"
+                    onClick={onNavigateToOverview}
                   >
-                    <strong>{sc.name}</strong>
-                    <span className="guide-sc-badge">{sc.badge}</span>
+                    ◈ Go to Incident Overview Dashboard
                   </button>
-                ))}
-              </div>
-
-              {/* Scenario-specific explanation & command */}
-              {selectedScenario === "redis_failure" && (
-                <div>
-                  <div className="guide-info-card">
-                    <div className="guide-info-icon">⚡</div>
-                    <div className="guide-info-body">
-                      <strong>Redis Failure Mechanics</strong>
-                      <p>
-                        Simulates Redis cache timeouts and connection failures on <code>product_cache.go</code>.
-                        Because OrderFlow implements graceful fallback, requests still return HTTP 200 via PostgreSQL,
-                        but Loki logs 40+ dependency errors and Prometheus marks the Redis window status as <strong>degraded</strong>.
-                      </p>
+                </div>
+                <div className="guide-action-col">
+                  <h4>Scenario Breakdown:</h4>
+                  <div className="guide-scenario-list">
+                    <div className="guide-scenario-item">
+                      <strong>🔴 redis_failure</strong>
+                      <p>Redis cache disconnects. OrderFlow gracefully falls back to Postgres while logging Redis cache degradation.</p>
+                    </div>
+                    <div className="guide-scenario-item">
+                      <strong>🗄️ db_failure</strong>
+                      <p>PostgreSQL write transactions fail on order creations, returning HTTP 500 Internal Server Error.</p>
+                    </div>
+                    <div className="guide-scenario-item">
+                      <strong>💳 payment_failure</strong>
+                      <p>Upstream payment provider is unavailable, causing payment processing to return HTTP 502 Bad Gateway.</p>
+                    </div>
+                    <div className="guide-scenario-item">
+                      <strong>⏱️ slow</strong>
+                      <p>Injects 2000ms latency on order creation; response time elevates P95/P99 latency without 500 errors.</p>
+                    </div>
+                    <div className="guide-scenario-item">
+                      <strong>💥 error_spike</strong>
+                      <p>Product catalog throws unexpected exceptions, driving service error rate to 100%.</p>
                     </div>
                   </div>
-                  <CommandBlock
-                    title="Activate Redis Failure Scenario"
-                    environment="GCP VM Terminal (OrderFlow :8080)"
-                    description="Sends a POST request to OrderFlow's failure injection endpoint to enable redis_failure."
-                    command={`curl -sS -i -X POST http://localhost:8080/api/admin/failure-scenario \\
-  -H 'Content-Type: application/json' \\
-  -d '{"scenario":"redis_failure"}'`}
-                    expectedOutput={`HTTP/1.1 200 OK
-Content-Type: application/json
-
-{"scenario":"redis_failure"}`}
-                    verificationTip="Verify the HTTP 200 response and JSON payload confirming scenario 'redis_failure'."
-                    troubleshootingTip="Ensure orderflow is running on port 8080 (check 'docker compose ps orderflow')."
-                  />
                 </div>
-              )}
-
-              {selectedScenario === "db_failure" && (
-                <div>
-                  <div className="guide-info-card">
-                    <div className="guide-info-icon">🗄</div>
-                    <div className="guide-info-body">
-                      <strong>Database Failure Mechanics</strong>
-                      <p>
-                        Simulates connection exhaustion and transaction failures in PostgreSQL.
-                        Order creation (<code>POST /api/orders</code>) and catalog queries immediately fail with HTTP 500,
-                        triggering database error logs in Loki and dependency degradation metrics.
-                      </p>
-                    </div>
-                  </div>
-                  <CommandBlock
-                    title="Activate Database Failure Scenario"
-                    environment="GCP VM Terminal (OrderFlow :8080)"
-                    description="Sends a POST request to activate db_failure in OrderFlow."
-                    command={`curl -sS -i -X POST http://localhost:8080/api/admin/failure-scenario \\
-  -H 'Content-Type: application/json' \\
-  -d '{"scenario":"db_failure"}'`}
-                    expectedOutput={`HTTP/1.1 200 OK
-Content-Type: application/json
-
-{"scenario":"db_failure"}`}
-                    verificationTip='Look for HTTP 200 with scenario "db_failure".'
-                    troubleshootingTip="If using public HTTPS, route /api/failure-scenario through Nginx or use port 8080 locally on the VM."
-                  />
-                </div>
-              )}
-
-              {selectedScenario === "payment_failure" && (
-                <div>
-                  <div className="guide-info-card">
-                    <div className="guide-info-icon">💳</div>
-                    <div className="guide-info-body">
-                      <strong>Payment Failure Mechanics</strong>
-                      <p>
-                        Simulates an outage of the external payment gateway provider in <code>payment_service.go</code>.
-                        Payment transactions (<code>POST /api/payment</code>) return HTTP 502 Bad Gateway and log
-                        <code>payment processing failed: payment provider unavailable (PAYMENT_GATEWAY_DOWN)</code>.
-                      </p>
-                    </div>
-                  </div>
-                  <CommandBlock
-                    title="Activate Payment Failure Scenario"
-                    environment="GCP VM Terminal (OrderFlow :8080)"
-                    description="Sends a POST request to activate payment_failure."
-                    command={`curl -sS -i -X POST http://localhost:8080/api/admin/failure-scenario \\
-  -H 'Content-Type: application/json' \\
-  -d '{"scenario":"payment_failure"}'`}
-                    expectedOutput={`HTTP/1.1 200 OK
-Content-Type: application/json
-
-{"scenario":"payment_failure"}`}
-                    verificationTip="Confirm scenario status is 'payment_failure'."
-                    troubleshootingTip='Check that the JSON request body contains scenario "payment_failure" exactly.'
-                  />
-                </div>
-              )}
-
-              {selectedScenario === "slow" && (
-                <div>
-                  <div className="guide-info-card">
-                    <div className="guide-info-icon">⏱</div>
-                    <div className="guide-info-body">
-                      <strong>High Latency Mechanics</strong>
-                      <p>
-                        Injects a 2000ms delay in <code>OrderService.CreateOrder()</code>.
-                        Requests succeed with HTTP 201 Created, but response times increase to &gt;2.0s,
-                        triggering elevated P95 and P99 latency alerts in Prometheus.
-                      </p>
-                    </div>
-                  </div>
-                  <CommandBlock
-                    title="Activate High Latency Scenario"
-                    environment="GCP VM Terminal (OrderFlow :8080)"
-                    description="Activates simulated 2-second sleep on order processing."
-                    command={`curl -sS -i -X POST http://localhost:8080/api/admin/failure-scenario \\
-  -H 'Content-Type: application/json' \\
-  -d '{"scenario":"slow"}'`}
-                    expectedOutput={`HTTP/1.1 200 OK
-Content-Type: application/json
-
-{"scenario":"slow"}`}
-                    verificationTip="Look for HTTP 200 confirming scenario 'slow'."
-                    troubleshootingTip="Make sure the scenario name is 'slow', not 'latency'."
-                  />
-                </div>
-              )}
-
-              {selectedScenario === "error_spike" && (
-                <div>
-                  <div className="guide-info-card">
-                    <div className="guide-info-icon">💥</div>
-                    <div className="guide-info-body">
-                      <strong>HTTP Error Spike Mechanics</strong>
-                      <p>
-                        Simulates an unhandled exception in <code>product_service.go</code> on <code>GET /api/products</code>.
-                        Returns immediate HTTP 500 and logs catalog failure spike, driving the service error rate to 100%.
-                      </p>
-                    </div>
-                  </div>
-                  <CommandBlock
-                    title="Activate Error Spike Scenario"
-                    environment="GCP VM Terminal (OrderFlow :8080)"
-                    description="Activates simulated catalog error spike."
-                    command={`curl -sS -i -X POST http://localhost:8080/api/admin/failure-scenario \\
-  -H 'Content-Type: application/json' \\
-  -d '{"scenario":"error_spike"}'`}
-                    expectedOutput={`HTTP/1.1 200 OK
-Content-Type: application/json
-
-{"scenario":"error_spike"}`}
-                    verificationTip="Confirm scenario payload shows 'error_spike'."
-                    troubleshootingTip="Check Docker logs if OrderFlow fails to accept the scenario."
-                  />
-                </div>
-              )}
-
-              {selectedScenario === "normal" && (
-                <div>
-                  <div className="guide-info-card">
-                    <div className="guide-info-icon">🌿</div>
-                    <div className="guide-info-body">
-                      <strong>Normal Baseline Mechanics</strong>
-                      <p>
-                        Clears all active fault simulations. All database, cache, and payment operations run normally
-                        with &lt;10ms response times and 0% error rate.
-                      </p>
-                    </div>
-                  </div>
-                  <CommandBlock
-                    title="Reset to Normal Scenario"
-                    environment="GCP VM Terminal (OrderFlow :8080)"
-                    description="Restores OrderFlow to healthy baseline operation."
-                    command={`curl -sS -i -X POST http://localhost:8080/api/admin/failure-scenario \\
-  -H 'Content-Type: application/json' \\
-  -d '{"scenario":"normal"}'`}
-                    expectedOutput={`HTTP/1.1 200 OK
-Content-Type: application/json
-
-{"scenario":"normal"}`}
-                    verificationTip="Confirm scenario status is 'normal'."
-                    troubleshootingTip="Use this command whenever you want to reset the environment."
-                  />
-                </div>
-              )}
-
-              <div className="guide-step-actions">
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  onClick={() => setActiveStep(1)}
-                >
-                  ← Back to Step 1
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => setActiveStep(3)}
-                >
-                  Continue to Step 3: Generate Traffic →
-                </button>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* STEP 3 */}
-          {activeStep === 3 && (
-            <div className="guide-step-section">
-              <div className="guide-step-header">
-                <span className="guide-step-badge">STEP 3</span>
-                <h2>Generate Scenario-Specific Traffic</h2>
-                <p className="muted">
-                  Different scenarios affect different application dependencies. Run the exact Bash loop matching your active scenario to generate telemetry evidence in Prometheus and Loki.
-                </p>
+          {/* =========================================================================
+              STEP 3: GENERATE SCENARIO-SPECIFIC TRAFFIC (THE ONLY BASH STEP)
+             ========================================================================= */}
+          <div id="guide-step-3" className="guide-step-section">
+            <div className="guide-step-header">
+              <span className="guide-step-badge">STEP 3</span>
+              <h2>Generate Scenario-Specific Traffic (Bash Commands)</h2>
+              <p className="muted">
+                Each scenario affects a specific endpoint and dependency. Select your scenario below to get the exact copyable Bash loop,
+                then run it in your terminal to feed live telemetry into Prometheus and Loki.
+              </p>
+            </div>
+
+            <div className="guide-card-content">
+              {/* Scenario Selector Tabs */}
+              <div className="guide-scenario-nav">
+                <button
+                  type="button"
+                  className={`guide-scenario-btn ${selectedScenario === "redis_failure" ? "active" : ""}`}
+                  onClick={() => setSelectedScenario("redis_failure")}
+                >
+                  🔴 Redis Failure
+                </button>
+                <button
+                  type="button"
+                  className={`guide-scenario-btn ${selectedScenario === "db_failure" ? "active" : ""}`}
+                  onClick={() => setSelectedScenario("db_failure")}
+                >
+                  🗄️ DB Failure
+                </button>
+                <button
+                  type="button"
+                  className={`guide-scenario-btn ${selectedScenario === "payment_failure" ? "active" : ""}`}
+                  onClick={() => setSelectedScenario("payment_failure")}
+                >
+                  💳 Payment Failure
+                </button>
+                <button
+                  type="button"
+                  className={`guide-scenario-btn ${selectedScenario === "slow" ? "active" : ""}`}
+                  onClick={() => setSelectedScenario("slow")}
+                >
+                  ⏱️ High Latency
+                </button>
+                <button
+                  type="button"
+                  className={`guide-scenario-btn ${selectedScenario === "error_spike" ? "active" : ""}`}
+                  onClick={() => setSelectedScenario("error_spike")}
+                >
+                  💥 Error Spike
+                </button>
+                <button
+                  type="button"
+                  className={`guide-scenario-btn ${selectedScenario === "normal" ? "active" : ""}`}
+                  onClick={() => setSelectedScenario("normal")}
+                >
+                  🌿 Normal Baseline
+                </button>
               </div>
 
-              {/* Scenario-specific traffic commands */}
+              {/* Scenario Content */}
               {selectedScenario === "redis_failure" && (
                 <div>
                   <div className="guide-tag-row">
@@ -493,7 +354,7 @@ Content-Type: application/json
                   <CommandBlock
                     title="Generate Redis Cache Degradation Traffic"
                     environment="GCP VM Terminal (OrderFlow :8080)"
-                    description="Sends 10 product requests at 1-second intervals. Redis cache misses will trigger internal fallback logs."
+                    description="Sends 10 product requests at 1-second intervals. Redis cache misses trigger internal fallback logs."
                     command={`for i in $(seq 1 10); do
   echo -n "Request $i: "
   curl -sS -o /dev/null -w 'HTTP %{http_code} | Time %{time_total}s\\n' \\
@@ -588,7 +449,7 @@ done`}
 Order 2: HTTP 201 | Time 2.0129s
 ...
 Order 5: HTTP 201 | Time 2.0155s`}
-                    verificationTip="Observe HTTP 201 Created but total elapsed time &gt; 2.0 seconds."
+                    verificationTip="Observe HTTP 201 Created but total elapsed time > 2.0 seconds."
                     troubleshootingTip="Keep request count to 5 so testing remains swift."
                   />
                 </div>
@@ -639,253 +500,171 @@ done`}
                     expectedOutput={`Healthy Request 1: HTTP 200 | Time 0.0048s
 ...
 Healthy Request 10: HTTP 200 | Time 0.0046s`}
-                    verificationTip="All requests should complete with HTTP 200 in &lt;10ms."
+                    verificationTip="All requests should complete with HTTP 200 in <10ms."
                     troubleshootingTip="If errors persist, make sure scenario 'normal' was accepted."
                   />
                 </div>
               )}
 
-              {/* Crucial Telemetry Wait Callout */}
+              {/* Wait Callout */}
               <div className="guide-warning-banner">
                 <span className="guide-warn-icon">⏳</span>
                 <div>
-                  <strong>Important: Wait 10 to 15 seconds after generating traffic</strong>
+                  <strong>Crucial Telemetry Timing: Wait 10 to 15 seconds after generating traffic</strong>
                   <p>
                     Prometheus scrapes OrderFlow metrics every 10 seconds, and Grafana Alloy flushes container logs into Loki.
-                    Waiting 10–15 seconds ensures full telemetry is available before launching the investigation.
+                    Waiting 10–15 seconds ensures full telemetry is available before launching the investigation in Step 4.
                   </p>
                 </div>
               </div>
-
-              <div className="guide-step-actions">
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  onClick={() => setActiveStep(2)}
-                >
-                  ← Back to Step 2
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => setActiveStep(4)}
-                >
-                  Continue to Step 4: Run AI Investigation →
-                </button>
-              </div>
             </div>
-          )}
+          </div>
 
-          {/* STEP 4 */}
-          {activeStep === 4 && (
-            <div className="guide-step-section">
-              <div className="guide-step-header">
-                <span className="guide-step-badge">STEP 4</span>
-                <h2>Run an Incident Investigation</h2>
-                <p className="muted">
-                  Launch an automated investigation. Signal Agent connects to the Observability MCP server to query Prometheus and Loki,
-                  assembles live telemetry, checks knowledge matches, and uses Gemini to synthesize a diagnosis.
-                </p>
-              </div>
+          {/* =========================================================================
+              STEP 4: RUN AI INVESTIGATION
+             ========================================================================= */}
+          <div id="guide-step-4" className="guide-step-section">
+            <div className="guide-step-header">
+              <span className="guide-step-badge">STEP 4</span>
+              <h2>Run an AI Incident Investigation in the UI</h2>
+              <p className="muted">
+                Launch an automated investigation. Signal Agent connects to the Observability MCP server to query Prometheus and Loki,
+                gathers real-time telemetry, checks knowledge matches, and uses Gemini to synthesize a diagnosis.
+              </p>
+            </div>
 
+            <div className="guide-card-content">
               <div className="guide-action-box">
                 <div className="guide-action-col">
-                  <h4>Option A — Through the Web UI (Recommended)</h4>
+                  <h4>How to Investigate in the UI:</h4>
                   <ol>
                     <li>Click <strong>◈ Incident overview</strong> in the sidebar.</li>
-                    <li>Ensure Service is set to <strong>orderflow</strong> and Duration to <strong>5m</strong> or <strong>10m</strong>.</li>
+                    <li>Ensure Service is set to <strong>orderflow</strong> and Duration to <strong>5m</strong>.</li>
                     <li>Click the purple <strong>Investigate Incident</strong> button.</li>
-                    <li>Observe the live spinner while evidence is gathered and analyzed.</li>
+                    <li>Watch the live spinner while evidence is gathered and analyzed by Gemini.</li>
+                  </ol>
+                  <button
+                    type="button"
+                    className="button button-primary"
+                    onClick={onNavigateToOverview}
+                  >
+                    ◈ Go to Incident Overview Dashboard
+                  </button>
+                </div>
+                <div className="guide-action-col">
+                  <h4>What You Will See in the Result:</h4>
+                  <ul className="guide-result-bullets">
+                    <li>
+                      <strong>Investigation Mode:</strong> <code>Mode: AI</code> (Cold incident — full LLM diagnostic).
+                    </li>
+                    <li>
+                      <strong>Root Cause Diagnosis:</strong> Rich Markdown explanation identifying the exact failure mechanism, affected dependencies, and code files.
+                    </li>
+                    <li>
+                      <strong>Service Status:</strong> Degraded or Critical with HTTP error rate and P95 latency indicators.
+                    </li>
+                    <li>
+                      <strong>Telemetry Signals:</strong> Real logs from Loki and Prometheus metrics queried via MCP.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* =========================================================================
+              STEP 5: AUTOMATED KNOWLEDGE LEARNING
+             ========================================================================= */}
+          <div id="guide-step-5" className="guide-step-section">
+            <div className="guide-step-header">
+              <span className="guide-step-badge">STEP 5</span>
+              <h2>Automated Knowledge Capture</h2>
+              <p className="muted">
+                When Gemini successfully diagnoses an incident, Signal Agent automatically captures the incident signature,
+                synthesizes a structured runbook article, and persists it into <code>knowledge.json</code>.
+              </p>
+            </div>
+
+            <div className="guide-card-content">
+              <div className="guide-info-card">
+                <div className="guide-info-icon">🧠</div>
+                <div className="guide-info-body">
+                  <strong>Automatic Incident Knowledge Learning Rules:</strong>
+                  <ul>
+                    <li>An article is created ONLY when Gemini successfully diagnoses an active incident (status is not &apos;healthy&apos; or &apos;normal&apos;).</li>
+                    <li>Newly learned articles <strong>always default to unverified (verified: false)</strong> to require human-in-the-loop review.</li>
+                    <li>The article is assigned a deterministic stable ID (e.g. <code>learned-orderflow-redis</code>).</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* =========================================================================
+              STEP 6: INVESTIGATE AGAIN (UNVERIFIED CHECK)
+             ========================================================================= */}
+          <div id="guide-step-6" className="guide-step-section">
+            <div className="guide-step-header">
+              <span className="guide-step-badge">STEP 6</span>
+              <h2>Investigate Again: Unverified Safety Gate Enforcement</h2>
+              <p className="muted">
+                Run an investigation a second time while the learned article remains unverified. This proves that SignalSleuth AI protects against unvetted automation.
+              </p>
+            </div>
+
+            <div className="guide-card-content">
+              <div className="guide-action-box">
+                <div className="guide-action-col">
+                  <h4>Run Second Investigation:</h4>
+                  <ol>
+                    <li>Return to <strong>◈ Incident Overview</strong>.</li>
+                    <li>Click the <strong>Investigate Incident</strong> button again.</li>
+                    <li>Notice that Gemini runs again and the investigation takes ~2 seconds.</li>
                   </ol>
                   <button
                     type="button"
                     className="button button-secondary"
                     onClick={onNavigateToOverview}
                   >
-                    Go to Incident Overview Dashboard ➔
+                    ◈ Go to Incident Overview
                   </button>
                 </div>
                 <div className="guide-action-col">
-                  <h4>Option B — Via Terminal / API</h4>
-                  <p>You can also invoke the investigation API directly from Bash:</p>
-                  <CommandBlock
-                    title="Execute Investigation via API"
-                    environment="GCP VM Terminal (Signal Agent :8090)"
-                    description="Calls the Signal Agent investigation endpoint directly."
-                    command={`curl -sS -i -X POST http://localhost:8090/api/investigations \\
-  -H 'Content-Type: application/json' \\
-  -d '{"service":"orderflow","duration":"5m"}'`}
-                    expectedOutput={`HTTP/1.1 200 OK
-Content-Type: application/json
-
-{
-  "service": "orderflow",
-  "duration": "5m",
-  "investigation_mode": "ai",
-  "ai_skipped": false,
-  "match_score": 0,
-  "duration_ms": 2341,
-  "evidence": {
-    "status": "degraded",
-    "severity": "medium",
-    "signals": [...]
-  },
-  "ai_explanation": "### Summary\\nThe orderflow service is marked as degraded..."
-}`}
-                    verificationTip="Check that investigation_mode is 'ai', duration_ms is ~2000ms, and ai_explanation contains a full diagnosis."
-                    troubleshootingTip="If duration_ms is very high, check network access to Google Gemini API."
-                  />
+                  <div className="guide-info-card">
+                    <div className="guide-info-icon">🛡</div>
+                    <div className="guide-info-body">
+                      <strong>Verification Safety Gate Rule:</strong>
+                      <p>
+                        Even though a matching learned article now exists in <code>knowledge.json</code>, the knowledge router explicitly checks:
+                        <em>&quot;Unverified articles must not independently qualify for skipping Gemini.&quot;</em>
+                      </p>
+                      <p>
+                        Because <code>verified: false</code>, the router decides:
+                        <code>mode=&quot;ai&quot;</code>, <code>ai_skipped=false</code>, and Gemini runs a fresh investigation.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <div className="guide-step-actions">
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  onClick={() => setActiveStep(3)}
-                >
-                  ← Back to Step 3
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => setActiveStep(5)}
-                >
-                  Continue to Step 5: Verify Knowledge Learning →
-                </button>
-              </div>
             </div>
-          )}
+          </div>
 
-          {/* STEP 5 */}
-          {activeStep === 5 && (
-            <div className="guide-step-section">
-              <div className="guide-step-header">
-                <span className="guide-step-badge">STEP 5</span>
-                <h2>Verify that New Knowledge Was Learned</h2>
-                <p className="muted">
-                  Notice what happens after the first AI investigation completes: Signal Agent extracts the error signature, synthesizes a structured runbook article, and persists it into <code>knowledge.json</code>.
-                </p>
-              </div>
-
-              <div className="guide-info-card">
-                <div className="guide-info-icon">🧠</div>
-                <div className="guide-info-body">
-                  <strong>Automatic Incident Knowledge Learning Rules</strong>
-                  <ul>
-                    <li>An article is created ONLY when Gemini successfully diagnoses an active incident (status is not 'healthy' or 'normal').</li>
-                    <li>Newly learned articles <strong>always default to unverified (verified: false)</strong> to require human-in-the-loop validation.</li>
-                    <li>The article is identified with a deterministic stable ID (e.g., <code>learned-orderflow-redis</code>).</li>
-                  </ul>
-                </div>
-              </div>
-
-              <CommandBlock
-                title="List Persisted Knowledge via API"
-                environment="GCP VM Terminal (Signal Agent :8090)"
-                description="Inspect all static runbooks and newly learned articles stored in the system."
-                command={`curl -sS http://localhost:8090/api/knowledge | grep -E '"(title|id|verified|source)":'`}
-                expectedOutput={`"id": "static-postgresql-failure", "source": "static", "title": "PostgreSQL Failure", "verified": true,
-"id": "static-redis-failure", "source": "static", "title": "Redis Failure", "verified": true,
-...
-"id": "learned-orderflow-redis", "source": "AI-generated", "title": "Learned Incident: orderflow - redis", "verified": false`}
-                verificationTip="Notice that static articles are always verified: true, while the newly learned article has verified: false."
-                troubleshootingTip="If no learned article appeared, make sure Gemini was configured and the incident had active errors (status != healthy)."
-              />
-
-              <div className="guide-step-actions">
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  onClick={() => setActiveStep(4)}
-                >
-                  ← Back to Step 4
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => setActiveStep(6)}
-                >
-                  Continue to Step 6: Investigate Again (Unverified Check) →
-                </button>
-              </div>
+          {/* =========================================================================
+              STEP 7: VERIFY ARTICLE IN KNOWLEDGE HUB
+             ========================================================================= */}
+          <div id="guide-step-7" className="guide-step-section">
+            <div className="guide-step-header">
+              <span className="guide-step-badge">STEP 7</span>
+              <h2>Verify the Article in Knowledge Hub</h2>
+              <p className="muted">
+                Open the Knowledge Hub page to inspect your learned articles, filter by origin, and officially verify the diagnosis.
+              </p>
             </div>
-          )}
 
-          {/* STEP 6 */}
-          {activeStep === 6 && (
-            <div className="guide-step-section">
-              <div className="guide-step-header">
-                <span className="guide-step-badge">STEP 6</span>
-                <h2>Investigate Again: Unverified Articles Cannot Skip AI</h2>
-                <p className="muted">
-                  Run an investigation again while the learned article remains unverified. This step proves that SignalSleuth AI protects against unvetted automation.
-                </p>
-              </div>
-
-              <div className="guide-info-card">
-                <div className="guide-info-icon">🛡</div>
-                <div className="guide-info-body">
-                  <strong>Verification Safety Gate Rule</strong>
-                  <p>
-                    Even though a matching learned article now exists in <code>knowledge.json</code>, the knowledge router explicitly checks:
-                    <em>&quot;Unverified articles must not independently qualify for skipping Gemini.&quot;</em>
-                  </p>
-                  <p>
-                    Because <code>verified: false</code>, the router decides:
-                    <code>mode=&quot;ai&quot;</code>, <code>ai_skipped=false</code>, and Gemini runs a fresh investigation.
-                  </p>
-                </div>
-              </div>
-
-              <CommandBlock
-                title="Execute Second Investigation (Unverified Article Test)"
-                environment="GCP VM Terminal (Signal Agent :8090)"
-                description="Trigger an investigation while the learned article is still unverified."
-                command={`curl -sS -i -X POST http://localhost:8090/api/investigations \\
-  -H 'Content-Type: application/json' \\
-  -d '{"service":"orderflow","duration":"5m"}' | grep -E '"(investigation_mode|ai_skipped|decision_reason|duration_ms)":'`}
-                expectedOutput={`"duration_ms": 2185,
-"investigation_mode": "ai",
-"ai_skipped": false,
-"decision_reason": "No verified article matches the current incident sufficiently."`}
-                verificationTip="Notice ai_skipped is false and duration_ms took ~2 seconds because Gemini had to run."
-                troubleshootingTip="If ai_skipped was true, someone already verified the article in Knowledge Hub."
-              />
-
-              <div className="guide-step-actions">
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  onClick={() => setActiveStep(5)}
-                >
-                  ← Back to Step 5
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => setActiveStep(7)}
-                >
-                  Continue to Step 7: Verify in Knowledge Hub →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 7 */}
-          {activeStep === 7 && (
-            <div className="guide-step-section">
-              <div className="guide-step-header">
-                <span className="guide-step-badge">STEP 7</span>
-                <h2>Verify the Article in Knowledge Hub</h2>
-                <p className="muted">
-                  Open the Knowledge Hub page to inspect your learned articles, filter by origin, and officially verify the diagnosis.
-                </p>
-              </div>
-
+            <div className="guide-card-content">
               <div className="guide-action-box">
                 <div className="guide-action-col">
-                  <h4>UI Verification Walkthrough</h4>
+                  <h4>How to Verify in the UI:</h4>
                   <ol>
                     <li>Click <strong>▤ Knowledge Hub</strong> in the sidebar.</li>
                     <li>Notice the metric cards: <strong>5 Static Runbooks</strong>, <strong>1+ Learned</strong>, and the count of <strong>Unverified</strong> articles.</li>
@@ -898,200 +677,117 @@ Content-Type: application/json
                     className="button button-primary"
                     onClick={onNavigateToKnowledge}
                   >
-                    Open Knowledge Hub Now ➔
+                    ▤ Open Knowledge Hub Now
                   </button>
                 </div>
                 <div className="guide-action-col">
-                  <h4>Equivalent API Command</h4>
-                  <p>You can also toggle verification status via the REST API:</p>
-                  <CommandBlock
-                    title="Verify Learned Article via PATCH API"
-                    environment="GCP VM Terminal (Signal Agent :8090)"
-                    description="Updates verified status of a learned article to true in knowledge.json."
-                    command={`curl -sS -i -X PATCH http://localhost:8090/api/knowledge/learned-orderflow-redis/verification \\
-  -H 'Content-Type: application/json' \\
-  -d '{"verified":true}'`}
-                    expectedOutput={`HTTP/1.1 200 OK
-Content-Type: application/json
-
-{
-  "id": "learned-orderflow-redis",
-  "title": "Learned Incident: orderflow - redis",
-  "verified": true,
-  "match_origin": "learned"
-}`}
-                    verificationTip="Look for HTTP 200 and 'verified': true in the returned payload."
-                    troubleshootingTip="Attempts to modify static runbooks (static-*) are rejected with HTTP 400 Bad Request."
-                  />
+                  <div className="guide-info-card">
+                    <div className="guide-info-icon">✓</div>
+                    <div className="guide-info-body">
+                      <strong>Human-in-the-Loop Approval:</strong>
+                      <p>
+                        Once verified, the article&apos;s status badge turns green (<code>Verified</code>) and the change is permanently saved into <code>knowledge.json</code>.
+                        The knowledge router is now authorized to use this article for sub-30ms automated incident matching!
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <div className="guide-step-actions">
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  onClick={() => setActiveStep(6)}
-                >
-                  ← Back to Step 6
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => setActiveStep(8)}
-                >
-                  Continue to Step 8: Exact Match & Instant Report →
-                </button>
-              </div>
             </div>
-          )}
+          </div>
 
-          {/* STEP 8 */}
-          {activeStep === 8 && (
-            <div className="guide-step-section">
-              <div className="guide-step-header">
-                <span className="guide-step-badge">STEP 8</span>
-                <h2>Demonstrate Exact Match & Instant Report (&lt;30ms)</h2>
-                <p className="muted">
-                  With the learned article now verified, run the investigation a third time. Watch the knowledge router achieve a 100% exact match and return an instant diagnosis without calling Gemini!
-                </p>
-              </div>
+          {/* =========================================================================
+              STEP 8: EXACT MATCH & INSTANT REPORT (<30ms)
+             ========================================================================= */}
+          <div id="guide-step-8" className="guide-step-section">
+            <div className="guide-step-header">
+              <span className="guide-step-badge">STEP 8</span>
+              <h2>Demonstrate Exact Match & Instant Report (&lt;30ms)</h2>
+              <p className="muted">
+                With the learned article now verified, run the investigation a third time. Watch the knowledge router achieve a 100% exact match and return an instant diagnosis without calling Gemini!
+              </p>
+            </div>
 
-              <div className="guide-info-card">
-                <div className="guide-info-icon">⚡</div>
-                <div className="guide-info-body">
-                  <strong>The Power of Knowledge-Driven Investigation</strong>
-                  <p>
-                    When an incoming incident signature matches a verified article above the threshold (score &ge; 0.90):
-                  </p>
-                  <ul>
-                    <li><strong>Match Score:</strong> Exactly <code>1.00</code> (100% match).</li>
-                    <li><strong>Mode:</strong> <code>knowledge</code> (deterministic runbook retrieval).</li>
-                    <li><strong>AI Skipped:</strong> <code>true</code> (no Gemini API latency or cost).</li>
-                    <li><strong>Speed:</strong> Execution drops from ~2500ms down to <strong>&lt; 30ms</strong>!</li>
-                  </ul>
+            <div className="guide-card-content">
+              <div className="guide-action-box">
+                <div className="guide-action-col">
+                  <h4>Trigger Third Investigation:</h4>
+                  <ol>
+                    <li>Return to <strong>◈ Incident overview</strong>.</li>
+                    <li>Click <strong>Investigate Incident</strong>.</li>
+                    <li>The result appears <strong>instantly</strong> in under 30 milliseconds!</li>
+                  </ol>
+                  <button
+                    type="button"
+                    className="button button-primary"
+                    onClick={onNavigateToOverview}
+                  >
+                    ◈ Go to Incident Overview
+                  </button>
+                </div>
+                <div className="guide-action-col">
+                  <div className="guide-info-card">
+                    <div className="guide-info-icon">⚡</div>
+                    <div className="guide-info-body">
+                      <strong>The Power of Knowledge-Driven Investigation:</strong>
+                      <ul>
+                        <li><strong>Match Score:</strong> Exactly <code>1.00</code> (100% match).</li>
+                        <li><strong>Mode:</strong> <code>knowledge</code> (deterministic runbook retrieval).</li>
+                        <li><strong>AI Skipped:</strong> <code>true</code> (no Gemini API latency or cost).</li>
+                        <li><strong>Speed:</strong> Execution drops from ~2500ms down to <strong>&lt; 30ms</strong>!</li>
+                      </ul>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <CommandBlock
-                title="Execute Third Investigation (Verified 100% Match)"
-                environment="GCP VM Terminal (Signal Agent :8090)"
-                description="Triggers the third investigation against the verified knowledge base."
-                command={`curl -sS -i -X POST http://localhost:8090/api/investigations \\
-  -H 'Content-Type: application/json' \\
-  -d '{"service":"orderflow","duration":"5m"}' | grep -E '"(investigation_mode|ai_skipped|match_score|decision_reason|duration_ms)":'`}
-                expectedOutput={`"duration_ms": 18,
-"investigation_mode": "knowledge",
-"ai_skipped": true,
-"match_score": 1,
-"decision_reason": "A verified article matches the current incident above the threshold."`}
-                verificationTip="Verify that duration_ms is < 30ms, ai_skipped is true, and match_score is 1."
-                troubleshootingTip="If match_score is 0, verify that the article in Knowledge Hub has its toggle set to 'Verified'."
-              />
-
-              <div className="guide-step-actions">
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  onClick={() => setActiveStep(7)}
-                >
-                  ← Back to Step 7
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => setActiveStep(9)}
-                >
-                  Continue to Step 9: Reset Scenario & Recovery →
-                </button>
-              </div>
             </div>
-          )}
+          </div>
 
-          {/* STEP 9 */}
-          {activeStep === 9 && (
-            <div className="guide-step-section">
-              <div className="guide-step-header">
-                <span className="guide-step-badge">STEP 9</span>
-                <h2>Reset Scenario & Verify Recovery</h2>
-                <p className="muted">
-                  Conclude the demonstration by resetting OrderFlow to the normal baseline, sending healthy traffic, and confirming full system recovery.
-                </p>
-              </div>
+          {/* =========================================================================
+              STEP 9: RESET SCENARIO & RECOVERY
+             ========================================================================= */}
+          <div id="guide-step-9" className="guide-step-section">
+            <div className="guide-step-header">
+              <span className="guide-step-badge">STEP 9</span>
+              <h2>Reset Scenario & Verify Recovery</h2>
+              <p className="muted">
+                Conclude the demonstration by resetting OrderFlow to the normal baseline, sending healthy traffic, and confirming full system recovery.
+              </p>
+            </div>
 
-              <CommandBlock
-                title="1. Reset Failure Scenario to Normal"
-                environment="GCP VM Terminal (OrderFlow :8080)"
-                description="Clears all active fault simulations."
-                command={`curl -sS -i -X POST http://localhost:8080/api/admin/failure-scenario \\
-  -H 'Content-Type: application/json' \\
-  -d '{"scenario":"normal"}'`}
-                expectedOutput={`HTTP/1.1 200 OK
-Content-Type: application/json
-
-{"scenario":"normal"}`}
-                verificationTip="Look for HTTP 200 confirming scenario 'normal'."
-                troubleshootingTip="OrderFlow failure simulator is in-memory and resets immediately."
-              />
-
-              <CommandBlock
-                title="2. Generate Healthy Recovery Traffic"
-                environment="GCP VM Terminal (OrderFlow :8080)"
-                description="Sends 10 healthy requests to clear error rate windows."
-                command={`for i in $(seq 1 10); do
-  curl -sS -o /dev/null -w 'HTTP %{http_code} | Time %{time_total}s\\n' \\
-    http://localhost:8080/api/products/1
-  sleep 1
-done`}
-                expectedOutput={`HTTP 200 | Time 0.0049s
-HTTP 200 | Time 0.0047s
-...`}
-                verificationTip="All requests complete with HTTP 200 in &lt;10ms."
-                troubleshootingTip="Wait 10 seconds for Prometheus metrics to reflect the healthy window."
-              />
-
-              <CommandBlock
-                title="3. Run Final Investigation to Confirm Health"
-                environment="GCP VM Terminal (Signal Agent :8090)"
-                description="Verifies that service status is restored to healthy."
-                command={`curl -sS -i -X POST http://localhost:8090/api/investigations \\
-  -H 'Content-Type: application/json' \\
-  -d '{"service":"orderflow","duration":"5m"}' | grep -E '"(status|severity|http_error_rate)":'`}
-                expectedOutput={`"status": "healthy",
-"severity": "normal",
-"http_error_rate": 0`}
-                verificationTip="Status should be 'healthy', severity 'normal', and error rate 0."
-                troubleshootingTip="If errors are still shown, wait 10 seconds for older error timestamps to expire from the 5m query window."
-              />
-
-              <div className="guide-success-card">
-                <span className="guide-success-icon">🎉</span>
-                <div>
-                  <strong>Congratulations! Full Demonstration Complete</strong>
-                  <p>
-                    You have successfully demonstrated the entire SignalSleuth AI lifecycle: fault injection, automated MCP observability collection,
-                    Gemini root cause analysis, automated knowledge capture, verification safety gates, and sub-30ms exact runbook reuse.
-                  </p>
+            <div className="guide-card-content">
+              <div className="guide-action-box">
+                <div className="guide-action-col">
+                  <h4>Recovery Steps in the UI:</h4>
+                  <ol>
+                    <li>On the Incident Overview page, switch the <strong>Failure Scenario</strong> dropdown to <strong>Normal</strong>.</li>
+                    <li>(Optional) In Step 3 above, select <strong>🌿 Normal Baseline</strong> and run the healthy traffic command.</li>
+                    <li>Wait 10 seconds for Prometheus metrics to reflect normal baseline conditions.</li>
+                    <li>Click <strong>Investigate Incident</strong> to confirm all systems are healthy.</li>
+                  </ol>
+                  <button
+                    type="button"
+                    className="button button-primary"
+                    onClick={onNavigateToOverview}
+                  >
+                    ◈ Go to Incident Overview
+                  </button>
+                </div>
+                <div className="guide-action-col">
+                  <div className="guide-success-card">
+                    <span className="guide-success-icon">🎉</span>
+                    <div>
+                      <strong>Full Demonstration Complete!</strong>
+                      <p>
+                        You have successfully walked through the complete SignalSleuth AI lifecycle: fault injection, automated MCP observability collection,
+                        Gemini root cause analysis, automated knowledge capture, verification safety gates, and sub-30ms exact runbook reuse.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <div className="guide-step-actions">
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  onClick={() => setActiveStep(8)}
-                >
-                  ← Back to Step 8
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => setActiveTab("troubleshooting")}
-                >
-                  Open Troubleshooting & Diagnostics →
-                </button>
-              </div>
             </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -1112,112 +808,99 @@ HTTP 200 | Time 0.0047s
                 <strong>Symptom:</strong> Investigation returns &quot;Gemini API key is not configured&quot; or &quot;Gemini rejected the API key&quot;.
               </p>
               <p>
-                <strong>Fix:</strong> Open ⚙ Settings in the sidebar, paste a valid Gemini 2.5 key, and click Test Connection.
-                Ensure your key has quota enabled in Google AI Studio.
-              </p>
-              <pre className="guide-mini-code"><code>curl -sS http://localhost:8090/api/settings/gemini</code></pre>
-            </div>
-
-            <div className="guide-trouble-card">
-              <h4>2. Scenario Activation Returning 400 Bad Request</h4>
-              <p>
-                <strong>Symptom:</strong> <code>invalid request body</code> or <code>unknown failure scenario</code>.
-              </p>
-              <p>
-                <strong>Fix:</strong> Supported scenario strings are: <code>normal</code>, <code>db_failure</code>, <code>redis_failure</code>, <code>payment_failure</code>, <code>error_spike</code>, <code>slow</code>.
-                Ensure request header includes <code>Content-Type: application/json</code>.
+                <strong>Fix:</strong> Click <strong>⚙ Settings</strong> in the top-right header, paste your Google Gemini API key, and click <strong>Test & Save Connection</strong>.
               </p>
             </div>
 
             <div className="guide-trouble-card">
-              <h4>3. Bash Commands Failing Due to Routing / Port Mismatch</h4>
+              <h4>2. Traffic Not Reflected in Investigation</h4>
               <p>
-                <strong>Symptom:</strong> Connection refused on port 8080 or 8090.
+                <strong>Symptom:</strong> Investigation says service is healthy even after running failure loop.
               </p>
               <p>
-                <strong>Fix:</strong> On the GCP VM, services are published on their native ports:
-                OrderFlow is on <code>http://localhost:8080</code>, Signal Agent is on <code>http://localhost:8090</code>,
-                and the public Nginx proxy is on <code>https://34.69.34.84</code> (ports 80 and 443).
-              </p>
-              <pre className="guide-mini-code"><code>docker compose ps</code></pre>
-            </div>
-
-            <div className="guide-trouble-card">
-              <h4>4. Unexpected HTTP Status Codes During Traffic Generation</h4>
-              <p>
-                <strong>Symptom:</strong> Getting 404 Not Found on traffic endpoints.
-              </p>
-              <p>
-                <strong>Fix:</strong> Verify endpoints against OrderFlow:
-                <code>GET /api/products</code>, <code>GET /api/products/1</code>, <code>POST /api/orders</code>, <code>POST /api/payment</code>.
-                Make sure you are calling port 8080 directly on the VM.
+                <strong>Fix:</strong> Prometheus scrapes OrderFlow every 10 seconds. Wait 10–15 seconds after finishing your curl loop before clicking <strong>Investigate Incident</strong>.
               </p>
             </div>
 
             <div className="guide-trouble-card">
-              <h4>5. No Metrics or Logs Appearing in Investigation</h4>
+              <h4>3. Nginx 502 Bad Gateway</h4>
               <p>
-                <strong>Symptom:</strong> Investigation shows healthy or 0 errors despite generating failure traffic.
+                <strong>Symptom:</strong> Accessing <code>https://34.69.34.84</code> gives HTTP 502.
               </p>
               <p>
-                <strong>Fix:</strong> Prometheus scrape interval is 10s and Loki batches logs.
-                Wait 10–15 seconds after running your traffic loop before clicking Investigate.
-              </p>
-              <pre className="guide-mini-code"><code>docker compose logs --tail=30 orderflow-loki</code></pre>
-            </div>
-
-            <div className="guide-trouble-card">
-              <h4>6. Investigation Producing No Useful Findings</h4>
-              <p>
-                <strong>Symptom:</strong> Status is healthy with 0 signals.
-              </p>
-              <p>
-                <strong>Fix:</strong> Make sure traffic was sent during the selected duration window (e.g. 5m).
-                If you ran traffic 15 minutes ago, select &quot;15m&quot; in the investigation duration selector.
+                <strong>Fix:</strong> Check if Docker containers are running:
+                <code>docker compose ps</code>. Ensure <code>orderflow</code> and <code>signal-agent</code> containers are up.
               </p>
             </div>
 
             <div className="guide-trouble-card">
-              <h4>7. Incident Article Not Being Learned</h4>
+              <h4>4. CORS Errors in Browser Console</h4>
               <p>
-                <strong>Symptom:</strong> No new article appears in Knowledge Hub after investigation.
+                <strong>Symptom:</strong> Browser console shows <code>blocked by CORS policy</code>.
               </p>
               <p>
-                <strong>Fix:</strong> An article is only learned when: (a) Gemini was configured and completed analysis without error, (b) the service status was not 'healthy', and (c) an identical article signature was not already saved.
-              </p>
-            </div>
-
-            <div className="guide-trouble-card">
-              <h4>8. Knowledge Hub Returning No Match or Score Below 100%</h4>
-              <p>
-                <strong>Symptom:</strong> Investigation mode stays &quot;ai&quot; even though article exists.
-              </p>
-              <p>
-                <strong>Fix:</strong> Check that the article's verification switch in Knowledge Hub is toggled to <strong>Verified</strong>.
-                Unverified articles cannot skip AI. Also ensure you are investigating the same service (<code>orderflow</code>).
+                <strong>Fix:</strong> Access the application through Nginx reverse proxy (port 80 or 443), which handles proxying and CORS headers automatically.
               </p>
             </div>
 
             <div className="guide-trouble-card">
-              <h4>9. HTTPS / Let&apos;s Encrypt / Nginx Proxy Failures</h4>
+              <h4>5. OrderFlow Failure Scenario Not Persisting</h4>
               <p>
-                <strong>Symptom:</strong> Browser shows SSL error or 502 Bad Gateway.
+                <strong>Symptom:</strong> Scenario returns to normal unexpectedly.
               </p>
               <p>
-                <strong>Fix:</strong> Check Nginx container logs and upstream availability:
+                <strong>Fix:</strong> OrderFlow stores scenarios in memory. If the OrderFlow container restarts, it resets to normal. Reactivate the scenario from the dropdown.
               </p>
-              <pre className="guide-mini-code"><code>docker compose logs --tail=50 signal-ui</code></pre>
             </div>
 
             <div className="guide-trouble-card">
-              <h4>10. Docker Containers Crashing or Restarting</h4>
+              <h4>6. Knowledge Hub Verification Fails</h4>
               <p>
-                <strong>Symptom:</strong> Service unavailable or 502.
+                <strong>Symptom:</strong> Clicking verify toggle returns an error.
               </p>
               <p>
-                <strong>Fix:</strong> Check container health status across the stack:
+                <strong>Fix:</strong> Static runbooks (<code>static-*</code>) are immutable and cannot be toggled. Only learned articles (<code>learned-*</code>) can be toggled.
               </p>
-              <pre className="guide-mini-code"><code>docker compose ps -a</code></pre>
+            </div>
+
+            <div className="guide-trouble-card">
+              <h4>7. Third Investigation Still Calls Gemini</h4>
+              <p>
+                <strong>Symptom:</strong> Step 8 takes 2 seconds and does not skip AI.
+              </p>
+              <p>
+                <strong>Fix:</strong> Ensure the learned article in Knowledge Hub has its toggle set to <strong>Verified</strong> (green badge).
+              </p>
+            </div>
+
+            <div className="guide-trouble-card">
+              <h4>8. Prometheus Metric Scrape Errors</h4>
+              <p>
+                <strong>Symptom:</strong> Signal Agent reports Prometheus queries returned empty results.
+              </p>
+              <p>
+                <strong>Fix:</strong> Verify Prometheus is running on port 9090 and that target <code>orderflow:8080</code> is listed as UP in <code>http://localhost:9090/targets</code>.
+              </p>
+            </div>
+
+            <div className="guide-trouble-card">
+              <h4>9. Loki Logs Not Showing in Evidence</h4>
+              <p>
+                <strong>Symptom:</strong> Signals list shows metrics but no log lines.
+              </p>
+              <p>
+                <strong>Fix:</strong> Verify Grafana Alloy is forwarding container logs to Loki (port 3100). Alloy flushes logs periodically.
+              </p>
+            </div>
+
+            <div className="guide-trouble-card">
+              <h4>10. Resetting All Learned Knowledge</h4>
+              <p>
+                <strong>Symptom:</strong> Want to reset the demo from scratch for a new presentation.
+              </p>
+              <p>
+                <strong>Fix:</strong> Knowledge articles are saved in <code>knowledge.json</code>. You can remove learned items from <code>knowledge.json</code> to start fresh.
+              </p>
             </div>
           </div>
         </div>
