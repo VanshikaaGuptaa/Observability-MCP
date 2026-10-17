@@ -98,8 +98,6 @@ services:
     networks:
       - observability-network
 
-  
-  
   signal-agent:
     build:
       context: .
@@ -109,7 +107,7 @@ services:
       - .env
     environment:
       AGENT_PORT: "8090"
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
       SETTINGS_ALLOW_REMOTE: "true"
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
@@ -151,6 +149,10 @@ services:
     container_name: signal-ui
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./certbot-webroot:/var/www/certbot:ro
     depends_on:
       signal-agent:
         condition: service_healthy
