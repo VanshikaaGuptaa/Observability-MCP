@@ -14,6 +14,10 @@ export default defineConfig({
         target: "http://localhost:8090",
         changeOrigin: true,
       },
+      "/api/knowledge": {
+        target: "http://localhost:8090",
+        changeOrigin: true,
+      },
       "/api/failure-scenario": {
         target: "http://localhost:8080",
         changeOrigin: true,

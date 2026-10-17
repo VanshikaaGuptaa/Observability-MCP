@@ -1,14 +1,101 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const knowledgeFile = "knowledge.json"
 
+var (
+	knowledgeFileMu sync.Mutex
+
+	ErrStaticArticleCannotBeModified = errors.New("static runbooks are always verified and cannot be modified")
+	ErrArticleNotFound              = errors.New("knowledge article not found")
+)
+
+// normalizeSlug turns strings into URL-safe slugs.
+func normalizeSlug(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else if r == '-' || r == '_' || r == ' ' || r == '/' {
+			if b.Len() > 0 && !strings.HasSuffix(b.String(), "-") {
+				b.WriteRune('-')
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+// ensureArticleID guarantees every article has a deterministic stable ID.
+func ensureArticleID(a *KnowledgeArticle) string {
+	if strings.TrimSpace(a.ID) != "" {
+		return strings.TrimSpace(a.ID)
+	}
+	fields := parseSignature(a.ErrorSignature)
+	srv := normalizeSlug(fields["service"])
+	dep := normalizeSlug(fields["dependency"])
+	if srv != "" && dep != "" {
+		a.ID = fmt.Sprintf("learned-%s-%s", srv, dep)
+		return a.ID
+	}
+	h := sha256.Sum256([]byte(strings.TrimSpace(a.ErrorSignature) + "\n" + strings.TrimSpace(a.Title)))
+	a.ID = fmt.Sprintf("learned-%x", h[:6])
+	return a.ID
+}
+
+// atomicWriteFile safely writes data to a temporary file in the target directory
+// and renames it atomically to prevent corruption or partial writes.
+func atomicWriteFile(filename string, data []byte) error {
+	dir := filepath.Dir(filename)
+	tmpFile, err := os.CreateTemp(dir, "knowledge-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpName := tmpFile.Name()
+	defer func() {
+		_ = os.Remove(tmpName)
+	}()
+
+	if _, err := tmpFile.Write(data); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	if err := tmpFile.Sync(); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("sync temp file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+
+	if err := os.Rename(tmpName, filename); err != nil {
+		// Fallback for Windows where destination already exists, or Linux bind-mounted files
+		_ = os.Remove(filename)
+		if err2 := os.Rename(tmpName, filename); err2 != nil {
+			if writeErr := os.WriteFile(filename, data, 0644); writeErr != nil {
+				return fmt.Errorf("rename temp file: %w (fallback write: %v)", err, writeErr)
+			}
+		}
+	}
+	return nil
+}
+
+// LoadSavedKnowledge reads all persisted articles from knowledge.json.
+// Concurrency-safe; ensures all returned articles have stable IDs and origin "learned".
 func LoadSavedKnowledge() ([]KnowledgeArticle, error) {
+	knowledgeFileMu.Lock()
+	defer knowledgeFileMu.Unlock()
+
 	data, err := os.ReadFile(knowledgeFile)
 	if os.IsNotExist(err) {
 		return []KnowledgeArticle{}, nil
@@ -17,23 +104,105 @@ func LoadSavedKnowledge() ([]KnowledgeArticle, error) {
 		return nil, err
 	}
 
-	var articles []KnowledgeArticle
 	if len(strings.TrimSpace(string(data))) == 0 {
 		return []KnowledgeArticle{}, nil
 	}
 
+	var articles []KnowledgeArticle
 	if err := json.Unmarshal(data, &articles); err != nil {
 		return nil, err
+	}
+
+	for i := range articles {
+		ensureArticleID(&articles[i])
+		if articles[i].MatchOrigin == "" {
+			articles[i].MatchOrigin = "learned"
+		}
 	}
 
 	return articles, nil
 }
 
-// SaveKnowledgeArticle returns true only when a new article was inserted.
-func SaveKnowledgeArticle(article KnowledgeArticle) (bool, error) {
-	articles, err := LoadSavedKnowledge()
+// UpdateLearnedVerification toggles the verification status of a learned article.
+// Rejects static runbooks. Preserves all other article fields and unknown metadata.
+func UpdateLearnedVerification(id string, verified bool) (*KnowledgeArticle, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, ErrArticleNotFound
+	}
+	if IsStaticArticleID(id) {
+		return nil, ErrStaticArticleCannotBeModified
+	}
+
+	knowledgeFileMu.Lock()
+	defer knowledgeFileMu.Unlock()
+
+	data, err := os.ReadFile(knowledgeFile)
+	if os.IsNotExist(err) {
+		return nil, ErrArticleNotFound
+	}
 	if err != nil {
-		return false, err
+		return nil, err
+	}
+
+	var rawItems []map[string]any
+	if err := json.Unmarshal(data, &rawItems); err != nil {
+		return nil, err
+	}
+
+	var articles []KnowledgeArticle
+	if err := json.Unmarshal(data, &articles); err != nil {
+		return nil, err
+	}
+
+	targetIndex := -1
+	for i := range articles {
+		artID := ensureArticleID(&articles[i])
+		rawID, _ := rawItems[i]["id"].(string)
+		if artID == id || rawID == id {
+			targetIndex = i
+			break
+		}
+	}
+
+	if targetIndex == -1 {
+		return nil, ErrArticleNotFound
+	}
+
+	// Preserve unknown metadata by updating the raw map
+	rawItems[targetIndex]["id"] = id
+	rawItems[targetIndex]["verified"] = verified
+
+	articles[targetIndex].ID = id
+	articles[targetIndex].Verified = verified
+	articles[targetIndex].MatchOrigin = "learned"
+
+	updatedData, err := json.MarshalIndent(rawItems, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+
+	if err := atomicWriteFile(knowledgeFile, updatedData); err != nil {
+		return nil, err
+	}
+
+	res := articles[targetIndex]
+	return &res, nil
+}
+
+// SaveKnowledgeArticle returns true only when a new article was inserted.
+// Newly learned articles default to verified: false and never overwrite user verification.
+func SaveKnowledgeArticle(article KnowledgeArticle) (bool, error) {
+	knowledgeFileMu.Lock()
+	defer knowledgeFileMu.Unlock()
+
+	data, err := os.ReadFile(knowledgeFile)
+	var rawItems []map[string]any
+	var articles []KnowledgeArticle
+
+	if err == nil && len(strings.TrimSpace(string(data))) > 0 {
+		_ = json.Unmarshal(data, &rawItems)
+		_ = json.Unmarshal(data, &articles)
 	}
 
 	for _, existing := range articles {
@@ -42,15 +211,28 @@ func SaveKnowledgeArticle(article KnowledgeArticle) (bool, error) {
 		}
 	}
 
+	ensureArticleID(&article)
 	article.MatchOrigin = ""
-	articles = append(articles, article)
+	article.Verified = false // AI-learned knowledge always starts unverified
 
-	data, err := json.MarshalIndent(articles, "", "  ")
+	rawBytes, err := json.Marshal(article)
+	if err != nil {
+		return false, err
+	}
+	var rawMap map[string]any
+	if err := json.Unmarshal(rawBytes, &rawMap); err != nil {
+		return false, err
+	}
+	delete(rawMap, "match_origin")
+
+	rawItems = append(rawItems, rawMap)
+
+	out, err := json.MarshalIndent(rawItems, "", "  ")
 	if err != nil {
 		return false, err
 	}
 
-	if err := os.WriteFile(knowledgeFile, data, 0644); err != nil {
+	if err := atomicWriteFile(knowledgeFile, out); err != nil {
 		return false, err
 	}
 
@@ -58,6 +240,10 @@ func SaveKnowledgeArticle(article KnowledgeArticle) (bool, error) {
 }
 
 func sameArticle(a, b KnowledgeArticle) bool {
+	if a.ID != "" && b.ID != "" && a.ID == b.ID {
+		return true
+	}
+
 	sigA := normalize(a.ErrorSignature)
 	sigB := normalize(b.ErrorSignature)
 
@@ -312,19 +498,22 @@ if failureType == "" {
 		endpoint,
 	)
 
-	return KnowledgeArticle{
+	article := KnowledgeArticle{
 		Title:          "Learned Incident: " + service + " - " + dependency,
 		Summary:        explanation,
 		MatchedOn:      []string{signature},
 		ErrorSignature: signature,
 		Source:         "AI-generated",
 		Verified:       false,
+		MatchOrigin:    "learned",
 		Steps: []string{
 			"Review the AI-generated diagnosis against the collected logs and metrics.",
 			"Validate the suggested remediation before applying it.",
 			"Re-run the investigation to confirm whether the issue is resolved.",
 		},
 	}
+	ensureArticleID(&article)
+	return article
 }
 
 func BuildErrorSignature(

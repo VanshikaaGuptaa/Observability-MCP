@@ -48,6 +48,8 @@ func main() {
 	mux.HandleFunc("/api/investigations", api.Investigate)
 	mux.HandleFunc("/api/settings/gemini", api.GeminiSettings)
 	mux.HandleFunc("/api/settings/gemini/test", api.TestGeminiSettings)
+	mux.HandleFunc("/api/knowledge", api.HandleKnowledge)
+	mux.HandleFunc("/api/knowledge/", api.HandleKnowledgeItem)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.AgentPort,

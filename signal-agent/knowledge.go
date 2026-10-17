@@ -14,6 +14,7 @@ func mustJSON(value any) []byte {
 }
 
 type KnowledgeArticle struct {
+	ID             string   `json:"id,omitempty"`
 	Title          string   `json:"title"`
 	Summary        string   `json:"summary"`
 	MatchedOn      []string `json:"matched_on"`
@@ -25,6 +26,7 @@ type KnowledgeArticle struct {
 }
 
 type runbook struct {
+	id      string
 	title   string
 	summary string
 	steps   []string
@@ -32,6 +34,7 @@ type runbook struct {
 
 var runbooks = []runbook{
 	{
+		id:      "static-postgresql-failure",
 		title:   "PostgreSQL Connection Failure",
 		summary: "Troubleshoot database connectivity and order creation failures.",
 		steps: []string{
@@ -42,6 +45,7 @@ var runbooks = []runbook{
 		},
 	},
 	{
+		id:      "static-redis-failure",
 		title:   "Redis Connectivity and Cache Failures",
 		summary: "Investigate Redis connection errors and cache degradation.",
 		steps: []string{
@@ -51,6 +55,7 @@ var runbooks = []runbook{
 		},
 	},
 	{
+		id:      "static-payment-failure",
 		title:   "Payment Processing Failures",
 		summary: "Investigate failed payment requests and payment dependency errors.",
 		steps: []string{
@@ -60,6 +65,7 @@ var runbooks = []runbook{
 		},
 	},
 	{
+		id:      "static-error-spike",
 		title:   "HTTP 5xx Error Spike",
 		summary: "Find the endpoints responsible for server errors.",
 		steps: []string{
@@ -69,6 +75,7 @@ var runbooks = []runbook{
 		},
 	},
 	{
+		id:      "static-high-latency",
 		title:   "High Latency and Slow Requests",
 		summary: "Investigate slow endpoints and increased request latency.",
 		steps: []string{
@@ -77,6 +84,35 @@ var runbooks = []runbook{
 			"Repeat the latency check after addressing the bottleneck.",
 		},
 	},
+}
+
+// GetAllStaticKnowledge returns all static runbooks as KnowledgeArticles.
+// Static runbooks are always verified and origin is static.
+func GetAllStaticKnowledge() []KnowledgeArticle {
+	articles := make([]KnowledgeArticle, 0, len(runbooks))
+	for _, book := range runbooks {
+		articles = append(articles, KnowledgeArticle{
+			ID:          book.id,
+			Title:       book.title,
+			Summary:     book.summary,
+			Steps:       book.steps,
+			Source:      "static",
+			Verified:    true,
+			MatchOrigin: "static",
+		})
+	}
+	return articles
+}
+
+// IsStaticArticleID checks whether the given ID belongs to a static runbook.
+func IsStaticArticleID(id string) bool {
+	id = strings.TrimSpace(id)
+	for _, book := range runbooks {
+		if book.id == id {
+			return true
+		}
+	}
+	return false
 }
 
 // FindKnowledge returns all static runbooks relevant to the evidence.
@@ -91,6 +127,7 @@ func FindKnowledge(evidence any) []KnowledgeArticle {
 
 	add := func(book runbook, reason string) {
 		matches = append(matches, KnowledgeArticle{
+			ID:          book.id,
 			Title:       book.title,
 			Summary:     book.summary,
 			MatchedOn:   []string{reason},

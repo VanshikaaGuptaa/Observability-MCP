@@ -24,10 +24,11 @@ export interface IncidentEvidence {
 }
 
 export interface KnowledgeArticle {
+  id?: string;
   title: string;
   summary: string;
-  matched_on: string[];
-  steps: string[];
+  matched_on?: string[];
+  steps?: string[];
   error_signature?: string;
   source?: string;
   verified?: boolean;

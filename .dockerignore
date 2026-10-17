@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+**/*.exe
+**/*.exe~
+**/*.old
+.git
+.idea
+.vscode

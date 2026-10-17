@@ -98,6 +98,67 @@ services:
     networks:
       - observability-network
 
+  
+  
+  signal-agent:
+    build:
+      context: .
+      dockerfile: ./signal-agent/dockerfile
+    container_name: signal-agent
+    env_file:
+      - .env
+    environment:
+      AGENT_PORT: "8090"
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      SETTINGS_ALLOW_REMOTE: "true"
+      PROMETHEUS_URL: http://prometheus:9090
+      LOKI_URL: http://loki:3100
+      ORDERFLOW_URL: http://orderflow:8080
+      MCP_WORKING_DIR: /app/observability-mcp
+      MCP_COMMAND: go
+    depends_on:
+      orderflow:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./signal-agent/knowledge.json:/app/signal-agent/knowledge.json
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://127.0.0.1:8090/health"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - observability-network
+
+  signal-ui:
+    build:
+      context: ./signal-ui
+      dockerfile: dockerfile
+    container_name: signal-ui
+    ports:
+      - "80:80"
+    depends_on:
+      signal-agent:
+        condition: service_healthy
+      orderflow:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - observability-network
 
   prometheus:
     image: prom/prometheus:latest

@@ -10,6 +10,7 @@ import "./style.css";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { SettingsPanel } from "./SettingsPanel";
+import { KnowledgeHubPage } from "./KnowledgeHubPage";
 
 const originLabels: Record<string, string> = {
   runbook: "Predefined runbook",
@@ -70,6 +71,8 @@ function App() {
   const [notice, setNotice] = useState("");
   const [service, setService] = useState("orderflow");
 const [duration, setDuration] = useState("10m");
+  const [activeView, setActiveView] =
+    useState<"overview" | "knowledge">("overview");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [geminiStatus, setGeminiStatus] =
     useState<GeminiKeyStatus | null>(null);
@@ -176,15 +179,39 @@ async function investigate() {
         </div>
 
         <div className="nav-label">WORKSPACE</div>
-        <a className="nav-item active" href="#overview">
+        <button
+          type="button"
+          className={`nav-item nav-button ${activeView === "overview" ? "active" : ""}`}
+          onClick={() => {
+            setActiveView("overview");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
           <span>◈</span> Incident overview
-        </a>
-        <a className="nav-item" href="#evidence">
+        </button>
+        <button
+          type="button"
+          className="nav-item nav-button"
+          onClick={() => {
+            setActiveView("overview");
+            setTimeout(() => {
+              document.getElementById("evidence")?.scrollIntoView({ behavior: "smooth" });
+            }, 60);
+          }}
+        >
           <span>⌕</span> Evidence explorer
-        </a>
-        <a className="nav-item" href="#knowledge">
+        </button>
+        <button
+          type="button"
+          id="nav-knowledge-hub"
+          className={`nav-item nav-button ${activeView === "knowledge" ? "active" : ""}`}
+          onClick={() => {
+            setActiveView("knowledge");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
           <span>▤</span> Knowledge Hub
-        </a>
+        </button>
         <button
           type="button"
           id="nav-settings"
@@ -203,6 +230,18 @@ async function investigate() {
         </div>
       </aside>
 
+      {activeView === "knowledge" ? (
+        <main className="main-content">
+          <KnowledgeHubPage
+            geminiStatus={geminiStatus}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
+          <footer className="footer" style={{ marginTop: 40 }}>
+            <span>SignalSleuth AI · Hackathon prototype</span>
+            <span>Organizational Knowledge Hub · Incident Learning & Runbooks</span>
+          </footer>
+        </main>
+      ) : (
       <main className="main-content" id="overview">
         <header className="topbar">
           <div>
@@ -502,14 +541,27 @@ async function investigate() {
         <section className="panel knowledge-panel" id="knowledge">
           <div className="panel-heading">
             <div>
-              <div className="eyebrow">ORGANIZATIONAL MEMORY</div>
-              <h2>Knowledge Hub</h2>
+              <div className="eyebrow">INCIDENT KNOWLEDGE MATCHES</div>
+              <h2>Matched Incident Runbooks</h2>
               <p className="muted">
-                Runbooks and learned incident patterns for faster future triage.
+                Runbooks and learned incident patterns evaluated for the latest investigation.
               </p>
             </div>
-            <span className="knowledge-count">{articles.length} ARTICLES</span>
-            
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <span className="knowledge-count">{articles.length} MATCHES</span>
+              <button
+                type="button"
+                id="open-knowledge-hub-btn"
+                className="button button-secondary"
+                style={{ padding: "6px 12px", fontSize: 11 }}
+                onClick={() => {
+                  setActiveView("knowledge");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                Open Knowledge Hub ➔
+              </button>
+            </div>
           </div>
 
           {articles.length === 0 ? (
@@ -544,11 +596,11 @@ async function investigate() {
   </ReactMarkdown>
 </div>
 
-                  {article.matched_on?.length > 0 && (
+                  {(article.matched_on?.length ?? 0) > 0 && (
                     <div className="match-list">
                       <strong>Matched on</strong>
                       <div className="tag-list">
-                        {article.matched_on.map((match) => (
+                        {article.matched_on?.map((match) => (
                           <span className="match-tag" key={match}>
                             {match}
                           </span>
@@ -581,6 +633,7 @@ async function investigate() {
           </span>
         </footer>
       </main>
+      )}
 
       <SettingsPanel
         open={settingsOpen}

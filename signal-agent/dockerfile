@@ -1,0 +1,28 @@
+FROM golang:1.25-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache ca-certificates git wget
+
+# Copy module definitions first for layer caching
+COPY signal-agent/go.mod signal-agent/go.sum ./signal-agent/
+COPY observability-mcp/go.mod observability-mcp/go.sum ./observability-mcp/
+
+RUN cd signal-agent && go mod download
+RUN cd observability-mcp && go mod download
+
+# Copy source code
+COPY signal-agent ./signal-agent
+COPY observability-mcp ./observability-mcp
+
+# Pre-compile observability-mcp into Go cache for fast startup
+RUN cd observability-mcp && go build -o /dev/null .
+
+# Build signal-agent binary
+RUN cd signal-agent && CGO_ENABLED=0 GOOS=linux go build -o /app/signal-agent/signal-agent .
+
+WORKDIR /app/signal-agent
+
+EXPOSE 8090
+
+ENTRYPOINT ["./signal-agent"]
