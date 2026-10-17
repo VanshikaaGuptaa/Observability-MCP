@@ -11,6 +11,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { SettingsPanel } from "./SettingsPanel";
 import { KnowledgeHubPage } from "./KnowledgeHubPage";
+import { HowToUsePage } from "./HowToUsePage";
 
 const originLabels: Record<string, string> = {
   runbook: "Predefined runbook",
@@ -72,7 +73,7 @@ function App() {
   const [service, setService] = useState("orderflow");
 const [duration, setDuration] = useState("10m");
   const [activeView, setActiveView] =
-    useState<"overview" | "knowledge">("overview");
+    useState<"overview" | "knowledge" | "guide">("overview");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [geminiStatus, setGeminiStatus] =
     useState<GeminiKeyStatus | null>(null);
@@ -214,6 +215,17 @@ async function investigate() {
         </button>
         <button
           type="button"
+          id="nav-how-to-use"
+          className={`nav-item nav-button ${activeView === "guide" ? "active" : ""}`}
+          onClick={() => {
+            setActiveView("guide");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
+          <span>📖</span> How to Use
+        </button>
+        <button
+          type="button"
           id="nav-settings"
           className={`nav-item nav-button ${settingsOpen ? "active" : ""}`}
           onClick={() => setSettingsOpen(true)}
@@ -230,7 +242,26 @@ async function investigate() {
         </div>
       </aside>
 
-      {activeView === "knowledge" ? (
+      {activeView === "guide" ? (
+        <main className="main-content">
+          <HowToUsePage
+            geminiStatus={geminiStatus}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onNavigateToOverview={() => {
+              setActiveView("overview");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            onNavigateToKnowledge={() => {
+              setActiveView("knowledge");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
+          <footer className="footer" style={{ marginTop: 40 }}>
+            <span>SignalSleuth AI · Hackathon prototype</span>
+            <span>Interactive Operational Guide · GCP VM & Docker Ready</span>
+          </footer>
+        </main>
+      ) : activeView === "knowledge" ? (
         <main className="main-content">
           <KnowledgeHubPage
             geminiStatus={geminiStatus}
