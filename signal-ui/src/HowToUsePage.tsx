@@ -113,7 +113,7 @@ export function HowToUsePage({
           <div className="guide-env-strip">
             <div className="guide-env-pill">
               <span className="guide-pill-dot green" />
-              <span>Public Dashboard: <strong>https://34.69.34.84</strong> (or <strong>http://localhost</strong>)</span>
+              <span>Public Dashboard: <strong>https://34.69.34.84</strong> (or <strong>https://34.69.34.84</strong>)</span>
             </div>
             <div className="guide-env-pill">
               <span className="guide-pill-dot blue" />
@@ -339,7 +339,7 @@ export function HowToUsePage({
                     command={`for i in $(seq 1 10); do
   echo -n "Request $i: "
   curl -sS -o /dev/null -w 'HTTP %{http_code} | Time %{time_total}s\\n' \\
-    http://localhost:8080/api/products/1
+    http://https://34.69.34.84/api/products/1
   sleep 1
 done`}
                     expectedOutput={`Request 1: HTTP 200 | Time 0.00512s
@@ -365,7 +365,7 @@ Request 10: HTTP 200 | Time 0.00495s`}
                     command={`for i in $(seq 1 10); do
   echo -n "Order $i: "
   curl -sS -o /dev/null -w 'HTTP %{http_code} | Time %{time_total}s\\n' \\
-    -X POST http://localhost:8080/api/orders \\
+    -X POST https://34.69.34.84//api/orders \\
     -H 'Content-Type: application/json' \\
     -d '{"customerName":"DemoCustomer","items":[{"productId":1,"quantity":1}]}'
   sleep 1
@@ -393,7 +393,7 @@ Order 10: HTTP 500 | Time 0.00410s`}
                     command={`for i in $(seq 1 10); do
   echo -n "Payment $i: "
   curl -sS -o /dev/null -w 'HTTP %{http_code} | Time %{time_total}s\\n' \\
-    -X POST http://localhost:8080/api/payment \\
+    -X POST https://34.69.34.84/api/payment \\
     -H 'Content-Type: application/json' \\
     -d "{\\"orderId\\":$i,\\"amount\\":49.99}"
   sleep 1
@@ -421,7 +421,7 @@ Payment 10: HTTP 502 | Time 0.1041s`}
                     command={`for i in $(seq 1 5); do
   echo -n "Order $i: "
   curl -sS -o /dev/null -w 'HTTP %{http_code} | Time %{time_total}s\\n' \\
-    -X POST http://localhost:8080/api/orders \\
+    -X POST https://34.69.34.84/api/orders \\
     -H 'Content-Type: application/json' \\
     -d '{"customerName":"SlowOrder","items":[{"productId":1,"quantity":1}]}'
   sleep 1
@@ -449,7 +449,7 @@ Order 5: HTTP 201 | Time 2.0155s`}
                     command={`for i in $(seq 1 10); do
   echo -n "Catalog Request $i: "
   curl -sS -o /dev/null -w 'HTTP %{http_code} | Time %{time_total}s\\n' \\
-    http://localhost:8080/api/products
+    https://34.69.34.84/api/products
   sleep 1
 done`}
                     expectedOutput={`Catalog Request 1: HTTP 500 | Time 0.0031s
@@ -475,7 +475,7 @@ Catalog Request 10: HTTP 500 | Time 0.0029s`}
                     command={`for i in $(seq 1 10); do
   echo -n "Healthy Request $i: "
   curl -sS -o /dev/null -w 'HTTP %{http_code} | Time %{time_total}s\\n' \\
-    http://localhost:8080/api/products/1
+    https://34.69.34.84/api/products/1
   sleep 1
 done`}
                     expectedOutput={`Healthy Request 1: HTTP 200 | Time 0.0048s
